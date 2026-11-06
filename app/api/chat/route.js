@@ -166,7 +166,7 @@ async function handleGroqFallback(messages, systemPrompt, maxTokens, memoriesRec
         "Authorization": `Bearer ${process.env.GROQ_API_KEY}`,
       },
       body: JSON.stringify({
-        model: "llama-3.3-70b-versatile",
+        model: "openai/gpt-oss-120b",
         max_tokens: maxTokens || 500,
         messages: [
           ...(systemPrompt ? [{ role: "system", content: systemPrompt }] : []),
