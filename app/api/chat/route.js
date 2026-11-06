@@ -1,11 +1,30 @@
 import { GoogleGenAI } from "@google/genai";
-import { searchMemories, processMessage, isChatSorterEnabled } from "../../../src/lib/chatsorter.js";
+import { createClient } from "@supabase/supabase-js";
+import { searchMemories, processMessage, isChatSorterEnabled, buildScopedChatId } from "../../../src/lib/chatsorter.js";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
+
+// Sliding-window rate limiter (15 requests per 60s per user/IP)
+const rateLimitBucket = new Map();
+const WINDOW_MS = 60 * 1000;
+const MAX_REQUESTS_PER_WINDOW = 15;
+
+function checkRateLimit(key) {
+  const now = Date.now();
+  const entry = rateLimitBucket.get(key) || [];
+  const recent = entry.filter(ts => now - ts < WINDOW_MS);
+  if (recent.length >= MAX_REQUESTS_PER_WINDOW) {
+    rateLimitBucket.set(key, recent);
+    return false;
+  }
+  recent.push(now);
+  rateLimitBucket.set(key, recent);
+  return true;
+}
 
 export async function OPTIONS() {
   return new Response(null, { status: 204, headers: corsHeaders });
@@ -31,9 +50,47 @@ function extractText(response) {
   return "";
 }
 
+function getSupabaseAdmin() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+  if (!supabaseUrl || !supabaseKey || supabaseUrl.includes("your_supabase_url")) return null;
+  return createClient(supabaseUrl, supabaseKey);
+}
+
 export async function POST(request) {
   try {
-    const { messages, systemPrompt, maxTokens, chatId } = await request.json();
+    const body = await request.json();
+    const { messages, systemPrompt, maxTokens, chatId, userId } = body;
+    let planTier = body.planTier || "free";
+
+    // ── Rate Limiting (15 req/min) ──────────────────────────────────
+    const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "anon";
+    const rateKey = userId ? `user:${userId}` : `ip:${clientIp}`;
+
+    if (!checkRateLimit(rateKey)) {
+      return Response.json(
+        {
+          reply: "You're sending messages too quickly! Please wait a moment or upgrade to Kikar Pro for higher throughput.",
+          error: "RATE_LIMIT_EXCEEDED",
+        },
+        { headers: corsHeaders, status: 429 }
+      );
+    }
+
+    // Verify true planTier from Supabase if userId is provided
+    if (userId) {
+      const supabase = getSupabaseAdmin();
+      if (supabase) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("plan_tier")
+          .eq("id", userId)
+          .maybeSingle();
+        if (profile?.plan_tier) {
+          planTier = profile.plan_tier;
+        }
+      }
+    }
 
     const apiKey = (process.env.GEMINI_API_KEY && !process.env.GEMINI_API_KEY.includes("your_"))
       ? process.env.GEMINI_API_KEY
@@ -42,7 +99,6 @@ export async function POST(request) {
         : "";
 
     if (!apiKey) {
-      // Fallback to Groq if user still has GROQ_API_KEY
       if (process.env.GROQ_API_KEY && !process.env.GROQ_API_KEY.includes("your_")) {
         return handleGroqFallback(messages, systemPrompt, maxTokens);
       }
@@ -56,7 +112,6 @@ export async function POST(request) {
       );
     }
 
-    // Format conversation messages for Gemini API
     const formattedContents = (messages || []).map(m => ({
       role: m.role === "assistant" ? "model" : "user",
       parts: [{ text: String(m.content || "") }],
@@ -66,14 +121,15 @@ export async function POST(request) {
       return Response.json({ reply: "" }, { headers: corsHeaders });
     }
 
-    // ── 🧠 ChatSorter AI Memory Layer Integration ─────────────────────
+    // ── Tenant-Isolated ChatSorter AI Memory Layer ─────────────────
+    const scopedChatId = chatId ? buildScopedChatId(userId, chatId) : "";
     let effectiveSystemPrompt = systemPrompt || "";
     let recalledMemories = [];
     const lastUserMessage = [...(messages || [])].reverse().find(m => m.role === "user")?.content;
 
-    if (chatId && lastUserMessage && isChatSorterEnabled()) {
+    if (scopedChatId && lastUserMessage && isChatSorterEnabled()) {
       try {
-        recalledMemories = await searchMemories(chatId, lastUserMessage);
+        recalledMemories = await searchMemories(scopedChatId, lastUserMessage, 5000);
         if (recalledMemories.length > 0) {
           effectiveSystemPrompt += `\n\n[Persistent Long-Term Memories about this User (from ChatSorter)]:\n${recalledMemories.map(m => `- ${m}`).join("\n")}\nUse these memories naturally when relevant to maintain continuity.`;
         }
@@ -84,16 +140,25 @@ export async function POST(request) {
 
     const ai = new GoogleGenAI({ apiKey });
 
-    const modelsToTry = [
-      "gemini-3.5-flash-lite",
-      "gemini-flash-lite-latest",
-      "gemini-3.5-flash",
-      "gemma-4-31b-it",
-      "gemma-4-26b-a4b-it",
-    ];
+    // Tier-aware model routing: Plus/Pro routes to high-capability Gemini 3.5 Flash first
+    const modelsToTry = (planTier === "plus" || planTier === "pro")
+      ? [
+          "gemini-3.5-flash",
+          "gemini-3.5-flash-lite",
+          "gemini-flash-lite-latest",
+          "gemma-4-31b-it",
+        ]
+      : [
+          "gemini-3.5-flash-lite",
+          "gemini-flash-lite-latest",
+          "gemini-3.5-flash",
+          "gemma-4-31b-it",
+          "gemma-4-26b-a4b-it",
+        ];
 
     let lastError = null;
     let replyText = "";
+    let modelUsed = "";
 
     for (const model of modelsToTry) {
       try {
@@ -108,6 +173,7 @@ export async function POST(request) {
 
         replyText = extractText(response);
         if (replyText) {
+          modelUsed = model;
           break;
         }
       } catch (err) {
@@ -117,11 +183,10 @@ export async function POST(request) {
     }
 
     if (replyText) {
-      // Asynchronously process the turn in ChatSorter background (non-blocking)
-      if (chatId && isChatSorterEnabled()) {
+      if (scopedChatId && isChatSorterEnabled()) {
         Promise.all([
-          lastUserMessage ? processMessage(chatId, lastUserMessage) : Promise.resolve(),
-          processMessage(chatId, replyText),
+          lastUserMessage ? processMessage(scopedChatId, lastUserMessage) : Promise.resolve(),
+          processMessage(scopedChatId, replyText),
         ]).catch(err => console.warn("ChatSorter background memory index error:", err));
       }
 
@@ -129,12 +194,12 @@ export async function POST(request) {
         {
           reply: replyText,
           memoriesRecalled: recalledMemories,
+          modelUsed,
         },
         { headers: corsHeaders }
       );
     }
 
-    // If all Gemini candidates failed and Groq is present, attempt fallback
     if (process.env.GROQ_API_KEY && !process.env.GROQ_API_KEY.includes("your_")) {
       console.log("Gemini attempts exhausted, trying Groq fallback...");
       return handleGroqFallback(messages, effectiveSystemPrompt, maxTokens, recalledMemories);
@@ -180,6 +245,7 @@ async function handleGroqFallback(messages, systemPrompt, maxTokens, memoriesRec
       return Response.json({
         reply: data.choices[0].message.content,
         memoriesRecalled,
+        modelUsed: "groq/openai/gpt-oss-120b",
       }, { headers: corsHeaders });
     }
     return Response.json({ reply: "AI service temporarily unavailable.", error: data }, { headers: corsHeaders });

@@ -14,9 +14,12 @@ export default function ProfileForm({ session, profile, onSaved, onCancel }: Pro
   const [editProfile, setEditProfile] = useState({
     display_name: profile?.display_name || "",
     bio: profile?.bio || "",
-    avatar_url: profile?.avatar_url || ""
+    avatar_url: profile?.avatar_url || "",
+    auto_replica_enabled: profile?.auto_replica_enabled ?? true,
+    replica_status_note: profile?.replica_status_note || "",
   })
   const [saving, setSaving] = useState(false)
+  const [purging, setPurging] = useState(false)
 
   async function saveProfile() {
     setSaving(true)
@@ -27,6 +30,8 @@ export default function ProfileForm({ session, profile, onSaved, onCancel }: Pro
         display_name: editProfile.display_name,
         bio: editProfile.bio,
         avatar_url: editProfile.avatar_url,
+        auto_replica_enabled: editProfile.auto_replica_enabled,
+        replica_status_note: editProfile.replica_status_note,
       }
       const { error } = await supabase.from("profiles")
         .upsert(updatedData, { onConflict: "id" })
@@ -45,6 +50,25 @@ export default function ProfileForm({ session, profile, onSaved, onCancel }: Pro
     }
   }
 
+  async function handlePurgeReplicaData() {
+    if (!window.confirm("Reset your Digital Replica and delete your AI chat history? This action cannot be undone.")) return
+    setPurging(true)
+    try {
+      await supabase.from("characters")
+        .delete()
+        .eq("replica_of", session.user.id)
+        .eq("created_by", session.user.id)
+      await supabase.from("messages")
+        .delete()
+        .eq("user_id", session.user.id)
+      alert("Your Digital Replica and AI chat history have been purged.")
+    } catch (err) {
+      console.error("Failed to purge replica data:", err)
+    } finally {
+      setPurging(false)
+    }
+  }
+
   return (
     <div style={{
       flex: 1,
@@ -59,7 +83,7 @@ export default function ProfileForm({ session, profile, onSaved, onCancel }: Pro
           className="cc-back-btn"
           onClick={onCancel}
           style={{
-            display: "none",
+            display: "flex",
             alignItems: "center",
             justifyContent: "center",
             background: T.surface,
@@ -80,9 +104,9 @@ export default function ProfileForm({ session, profile, onSaved, onCancel }: Pro
             fontWeight: 700,
             color: T.text,
             letterSpacing: "-0.03em",
-          }}>My Profile</h2>
+          }}>My Profile &amp; Replica Controls</h2>
           <p style={{ margin: "4px 0 0", fontSize: 12, color: T.muted }}>
-            How others see you on Kikar
+            Manage your public identity, offline Digital Twin settings, and data privacy
           </p>
         </div>
       </div>
@@ -99,7 +123,6 @@ export default function ProfileForm({ session, profile, onSaved, onCancel }: Pro
         border: `1px solid ${T.border}`,
         marginBottom: 24,
       }}>
-        {/* Avatar preview */}
         <div style={{ position: "relative" }}>
           {editProfile.avatar_url
             ? <img
@@ -125,7 +148,6 @@ export default function ProfileForm({ session, profile, onSaved, onCancel }: Pro
                 fontSize: 34,
               }}>👤</div>
           }
-          {/* Online indicator */}
           <div style={{
             position: "absolute",
             bottom: 4,
@@ -171,19 +193,10 @@ export default function ProfileForm({ session, profile, onSaved, onCancel }: Pro
           fontFamily: T.font,
           outline: "none",
           boxSizing: "border-box",
-          transition: "border-color 0.18s, box-shadow 0.18s",
         }}
         placeholder="https://…"
         value={editProfile.avatar_url}
         onChange={e => setEditProfile({ ...editProfile, avatar_url: e.target.value })}
-        onFocus={e => {
-          e.target.style.borderColor = "hsla(119,99%,46%,0.5)"
-          e.target.style.boxShadow = "0 0 0 3px hsla(119,99%,46%,0.08)"
-        }}
-        onBlur={e => {
-          e.target.style.borderColor = T.border
-          e.target.style.boxShadow = "none"
-        }}
       />
 
       {/* Display name */}
@@ -208,19 +221,10 @@ export default function ProfileForm({ session, profile, onSaved, onCancel }: Pro
           fontFamily: T.font,
           outline: "none",
           boxSizing: "border-box",
-          transition: "border-color 0.18s, box-shadow 0.18s",
         }}
         placeholder="Your name"
         value={editProfile.display_name}
         onChange={e => setEditProfile({ ...editProfile, display_name: e.target.value })}
-        onFocus={e => {
-          e.target.style.borderColor = "hsla(119,99%,46%,0.5)"
-          e.target.style.boxShadow = "0 0 0 3px hsla(119,99%,46%,0.08)"
-        }}
-        onBlur={e => {
-          e.target.style.borderColor = T.border
-          e.target.style.boxShadow = "none"
-        }}
       />
 
       {/* Bio */}
@@ -246,22 +250,84 @@ export default function ProfileForm({ session, profile, onSaved, onCancel }: Pro
           outline: "none",
           resize: "vertical",
           boxSizing: "border-box",
-          transition: "border-color 0.18s, box-shadow 0.18s",
           minHeight: 80,
         }}
         rows={3}
         placeholder="Tell people about yourself…"
         value={editProfile.bio}
         onChange={e => setEditProfile({ ...editProfile, bio: e.target.value })}
-        onFocus={e => {
-          e.target.style.borderColor = "hsla(119,99%,46%,0.5)"
-          e.target.style.boxShadow = "0 0 0 3px hsla(119,99%,46%,0.08)"
-        }}
-        onBlur={e => {
-          e.target.style.borderColor = T.border
-          e.target.style.boxShadow = "none"
-        }}
       />
+
+      {/* ── Digital Replica Control Center & Privacy ─────────────── */}
+      <div style={{
+        marginTop: 22,
+        padding: 18,
+        background: T.surface,
+        border: "1px solid rgba(168,85,247,0.35)",
+        borderRadius: 14,
+      }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#c084fc" }}>
+              🪞 Offline Digital Replica Auto-Responder
+            </div>
+            <div style={{ fontSize: 11, color: T.muted, marginTop: 2 }}>
+              Allow your AI Replica to respond to friends in DMs when you are offline (always labeled with an AI badge).
+            </div>
+          </div>
+          <input
+            type="checkbox"
+            checked={editProfile.auto_replica_enabled}
+            onChange={e => setEditProfile({ ...editProfile, auto_replica_enabled: e.target.checked })}
+            style={{ width: 18, height: 18, accentColor: "#a855f7", cursor: "pointer" }}
+          />
+        </div>
+
+        <label style={{ fontSize: 11, color: T.muted, display: "block", margin: "12px 0 6px", fontWeight: 600 }}>
+          Offline Status Note for Your Replica
+        </label>
+        <input
+          style={{
+            width: "100%",
+            padding: "10px 14px",
+            background: T.bgAlt,
+            border: `1px solid ${T.border}`,
+            borderRadius: 8,
+            color: T.text,
+            fontSize: 13,
+            fontFamily: T.font,
+            outline: "none",
+            boxSizing: "border-box",
+          }}
+          placeholder="e.g. Studying for exams till 9 PM — my AI twin is taking notes!"
+          value={editProfile.replica_status_note}
+          onChange={e => setEditProfile({ ...editProfile, replica_status_note: e.target.value })}
+        />
+
+        <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${T.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 11, color: T.muted }}>
+            Data &amp; Memory Privacy: Permanently clear your trained replica and AI chat logs.
+          </span>
+          <button
+            type="button"
+            disabled={purging}
+            onClick={handlePurgeReplicaData}
+            style={{
+              padding: "7px 12px",
+              background: "rgba(248,113,113,0.1)",
+              border: "1px solid rgba(248,113,113,0.35)",
+              borderRadius: 8,
+              color: T.red,
+              fontSize: 11,
+              fontWeight: 600,
+              cursor: purging ? "wait" : "pointer",
+              fontFamily: T.font,
+            }}
+          >
+            {purging ? "⏳ Purging…" : "🗑️ Purge Replica & AI Logs"}
+          </button>
+        </div>
+      </div>
 
       {/* Buttons */}
       <div style={{ display: "flex", gap: 10, marginTop: 28 }}>
@@ -278,10 +344,7 @@ export default function ProfileForm({ session, profile, onSaved, onCancel }: Pro
             fontFamily: T.font,
             fontWeight: 500,
             cursor: "pointer",
-            transition: "border-color 0.18s, color 0.18s",
           }}
-          onMouseEnter={e => { const el = e.currentTarget; el.style.borderColor = T.borderHover; el.style.color = T.text }}
-          onMouseLeave={e => { const el = e.currentTarget; el.style.borderColor = T.border; el.style.color = T.muted }}
         >Cancel</button>
 
         <button
@@ -302,7 +365,6 @@ export default function ProfileForm({ session, profile, onSaved, onCancel }: Pro
             color: saving ? T.muted : T.primaryFg,
             letterSpacing: "0.01em",
             boxShadow: saving ? "none" : "0 4px 20px hsla(119,99%,46%,0.25)",
-            transition: "all 0.18s",
           }}
         >
           {saving ? "⏳ Saving…" : "✓ Save Profile"}

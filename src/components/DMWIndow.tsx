@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react"
 import { supabase } from "../lib/supabase"
 import { T } from "../styles"
-import { formatTime, formatDate, showNotification } from "../lib/helpers"
+import { formatTime, formatDate, showNotification, speakMessageText, stopSpeakingText } from "../lib/helpers"
 
 interface Props {
   session: any
@@ -22,22 +22,27 @@ export default function DMWindow({
   const [uploadingImage, setUploadingImage] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [hoveredMsgId, setHoveredMsgId] = useState<string | null>(null)
+  const [speakingMsgId, setSpeakingMsgId] = useState<string | null>(null)
+  const [autoReplicaMode, setAutoReplicaMode] = useState(true)
+  const [replicaTyping, setReplicaTyping] = useState(false)
+  const [catchUpSummary, setCatchUpSummary] = useState<string | null>(null)
+  const [summarizingDigest, setSummarizingDigest] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const other = activeConvo.user1_id === session.user.id
     ? activeConvo.user2
     : activeConvo.user1
-  const otherProfile = allProfiles.find((p: any) => p.id === other?.id)
+  const otherProfile = allProfiles.find((p: any) => p.id === other?.id) || other
 
   useEffect(() => {
     if (!activeConvo) return
+    setCatchUpSummary(null)
     supabase.from("direct_messages").select("*")
       .eq("conversation_id", activeConvo.id)
       .order("created_at", { ascending: true })
       .then(({ data }) => setDirectMessages(data || []))
 
-    // Mark messages as read
     supabase.from("direct_messages")
       .update({ read_at: new Date().toISOString() })
       .eq("conversation_id", activeConvo.id)
@@ -72,17 +77,159 @@ export default function DMWindow({
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [directMessages])
+  }, [directMessages, replicaTyping])
+
+  /**
+   * Triggers either:
+   * 1. Multiplayer @ai Co-Pilot response inside the DM thread if user typed `@ai ...`, OR
+   * 2. Automatic Offline Digital Replica reply when the recipient is offline (`!otherProfile?.is_online`).
+   */
+  async function triggerSmartDMResponse(userMessageText: string, recentMessages: any[]) {
+    const isAiSummon = /^@(ai|kikar)\b/i.test(userMessageText.trim())
+    const isRecipientOffline = !otherProfile?.is_online && autoReplicaMode
+
+    if (!isAiSummon && !isRecipientOffline) return
+
+    setReplicaTyping(true)
+    try {
+      let systemPrompt = ""
+      let personaBadge = ""
+
+      if (isAiSummon) {
+        const otherName = otherProfile?.display_name || otherProfile?.username || "Friend"
+        systemPrompt = `You are Kikar AI Co-Pilot, summoned inside a direct message conversation between two human friends (${session.user.email?.split("@")[0]} and ${otherName}). Be helpful, witty, concise (under 75 words), and directly answer or mediate their request.`
+        personaBadge = "✦ Kikar AI Co-Pilot"
+      } else {
+        // Look up the offline user's replica character
+        const { data: replicaChar } = await supabase
+          .from("characters")
+          .select("*")
+          .eq("replica_of", other.id)
+          .eq("is_replica", true)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        const otherName = otherProfile?.display_name || otherProfile?.username || "Friend"
+        if (replicaChar?.system_prompt) {
+          systemPrompt = `${replicaChar.system_prompt}\nYou are replying as ${otherName}'s Digital Replica while ${otherName} is offline. Keep it natural and concise.`
+        } else {
+          // Build an on-the-fly style prompt from the offline user's past messages in this thread
+          const pastSamples = recentMessages
+            .filter(m => m.sender_id === other.id && !m.content?.startsWith("[image]:"))
+            .slice(-15)
+            .map(m => m.content)
+            .join("\n")
+
+          if (!pastSamples) {
+            setReplicaTyping(false)
+            return
+          }
+          systemPrompt = `You are the Digital Twin Replica of ${otherName}, who is currently offline. Match their tone, slang, and message length based on their past messages:\n${pastSamples}\nKeep replies under 50 words.`
+        }
+        personaBadge = `🪞 ${otherName}'s AI Replica`
+      }
+
+      const formattedHistory = recentMessages.slice(-10).map(m => ({
+        role: m.sender_id === session.user.id ? "user" : "assistant",
+        content: String(m.content || "").replace(/^\[replica:.*?\]:\s*/i, ""),
+      }))
+
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [...formattedHistory, { role: "user", content: userMessageText }],
+          systemPrompt,
+          userId: session.user.id,
+          chatId: `dm_${activeConvo.id}`,
+        }),
+      })
+      const data = await res.json()
+      if (data.reply) {
+        const taggedContent = `[replica:${personaBadge}]: ${data.reply}`
+        const { data: inserted } = await supabase
+          .from("direct_messages")
+          .insert({
+            conversation_id: activeConvo.id,
+            sender_id: isAiSummon ? session.user.id : other.id,
+            content: taggedContent,
+          })
+          .select()
+          .single()
+
+        if (inserted) {
+          setDirectMessages(prev => (prev.some(m => m.id === inserted.id) ? prev : [...prev, inserted]))
+        }
+      }
+    } catch (err) {
+      console.warn("Smart DM response error:", err)
+    } finally {
+      setReplicaTyping(false)
+    }
+  }
 
   async function sendDirectMessage() {
     if (!input.trim() || !activeConvo || !session) return
     const msgContent = input.trim()
     setInput("")
-    await supabase.from("direct_messages").insert({
-      conversation_id: activeConvo.id,
-      sender_id: session.user.id,
-      content: msgContent
-    })
+    const historySnapshot = [...directMessages]
+
+    const { data: inserted } = await supabase
+      .from("direct_messages")
+      .insert({
+        conversation_id: activeConvo.id,
+        sender_id: session.user.id,
+        content: msgContent,
+      })
+      .select()
+      .single()
+
+    if (inserted) {
+      setDirectMessages(prev => (prev.some(m => m.id === inserted.id) ? prev : [...prev, inserted]))
+    }
+
+    await triggerSmartDMResponse(msgContent, historySnapshot)
+  }
+
+  /**
+   * Generates a 3-bullet "Morning Catch-Up Digest" summarizing recent DM & Replica activity.
+   */
+  async function generateCatchUpDigest() {
+    if (directMessages.length === 0 || summarizingDigest) return
+    setSummarizingDigest(true)
+    try {
+      const recentTranscript = directMessages
+        .slice(-25)
+        .map(m => {
+          const speaker = m.sender_id === session.user.id ? "Me" : (otherProfile?.display_name || otherProfile?.username || "Friend")
+          return `${speaker}: ${m.content}`
+        })
+        .join("\n")
+
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [
+            {
+              role: "user",
+              content: `Summarize this recent conversation (including any AI Replica replies) into 3 short, actionable bullet points covering: (1) Main topics discussed, (2) Any questions or plans pending, and (3) Overall vibe.\n\nTranscript:\n${recentTranscript}`,
+            },
+          ],
+          systemPrompt: "You are a concise executive catch-up assistant. Output 3 brief bullet points only.",
+          userId: session.user.id,
+        }),
+      })
+      const data = await res.json()
+      if (data.reply) {
+        setCatchUpSummary(data.reply)
+      }
+    } catch (err) {
+      console.error("Failed to generate catch-up digest:", err)
+    } finally {
+      setSummarizingDigest(false)
+    }
   }
 
   async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -90,15 +237,15 @@ export default function DMWindow({
     if (!file || !activeConvo || !session) return
     setUploadingImage(true)
     try {
-      const ext = file.name.split('.').pop()
+      const ext = file.name.split(".").pop()
       const fileName = `${session.user.id}-${Date.now()}.${ext}`
-      const { error } = await supabase.storage.from('chat-images').upload(fileName, file)
+      const { error } = await supabase.storage.from("chat-images").upload(fileName, file)
       if (error) throw error
-      const { data: { publicUrl } } = supabase.storage.from('chat-images').getPublicUrl(fileName)
+      const { data: { publicUrl } } = supabase.storage.from("chat-images").getPublicUrl(fileName)
       await supabase.from("direct_messages").insert({
         conversation_id: activeConvo.id,
         sender_id: session.user.id,
-        content: `[image]:${publicUrl}`
+        content: `[image]:${publicUrl}`,
       })
     } catch (err) {
       alert("Failed to upload image")
@@ -124,11 +271,24 @@ export default function DMWindow({
   }
 
   function handleCopy(content: string, id: string) {
-    const text = content.startsWith("[image]:") ? content.replace("[image]:", "") : content
+    const text = content
+      .replace(/^\[image\]:/i, "")
+      .replace(/^\[replica:.*?\]:\s*/i, "")
     navigator.clipboard.writeText(text).then(() => {
       setCopiedId(id)
       setTimeout(() => setCopiedId(null), 2000)
     })
+  }
+
+  function handleSpeakToggle(content: string, id: string) {
+    if (speakingMsgId === id) {
+      stopSpeakingText()
+      setSpeakingMsgId(null)
+      return
+    }
+    const clean = content.replace(/^\[replica:.*?\]:\s*/i, "")
+    setSpeakingMsgId(id)
+    speakMessageText(clean, () => setSpeakingMsgId(null))
   }
 
   async function createReplica() {
@@ -150,13 +310,14 @@ export default function DMWindow({
 
     const sampleMessages = msgs.map((m: any) => m.content).join("\n")
     const res = await fetch("/api/chat", {
-      method: "POST", 
+      method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         messages: [{ role: "user", content: `Analyze the writing style, personality, tone, vocabulary, and communication patterns from these messages. Write a system prompt (max 200 words) for an AI to perfectly impersonate this person.\n\nMessages:\n${sampleMessages}` }],
         systemPrompt: "You are an expert at analyzing writing styles. Return only the system prompt text, nothing else.",
+        userId: session.user.id,
         chatId: `convo_${activeConvo.id}`,
-      })
+      }),
     })
     const data = await res.json()
     const system_prompt = `${data.reply} Never break character. Match the original person's typical message length and style exactly.`
@@ -174,7 +335,7 @@ export default function DMWindow({
         created_by: session.user.id,
         is_replica: true,
         replica_of: other.id,
-        is_public: false
+        is_public: false,
       })
       .select().single()
 
@@ -200,6 +361,7 @@ export default function DMWindow({
         background: T.surface,
         borderBottom: `1px solid ${T.border}`,
         flexShrink: 0,
+        flexWrap: "wrap",
       }}>
         <button
           className="cc-back-btn"
@@ -230,28 +392,73 @@ export default function DMWindow({
                 width: 42, height: 42, borderRadius: "50%",
                 background: T.surface,
                 border: `1px solid ${T.border}`,
-                display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20
+                display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20,
               }}>👤</div>
           }
           <div style={{
             position: "absolute", bottom: 1, right: 1,
             width: 11, height: 11, borderRadius: "50%",
-            background: otherProfile?.is_online ? "#22c55e" : "#3a3a3a",
+            background: otherProfile?.is_online ? "#22c55e" : "#a855f7",
             border: `2px solid ${T.surface}`,
-            boxShadow: otherProfile?.is_online ? "0 0 6px rgba(34,197,94,0.5)" : "none",
+            boxShadow: otherProfile?.is_online ? "0 0 6px rgba(34,197,94,0.5)" : "0 0 6px rgba(168,85,247,0.5)",
           }} />
         </div>
 
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ flex: 1, minWidth: 140 }}>
           <div style={{ fontSize: 15, fontWeight: 600, color: T.text, letterSpacing: "-0.02em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {other?.display_name || other?.username || "Direct Chat"}
           </div>
-          <div style={{ fontSize: 11, color: otherProfile?.is_online ? "#22c55e" : T.muted, marginTop: 2 }}>
-            {otherProfile?.is_online ? "● Online" : "● Offline"}
+          <div style={{ fontSize: 11, color: otherProfile?.is_online ? "#22c55e" : "#a855f7", marginTop: 2, display: "flex", alignItems: "center", gap: 6 }}>
+            <span>{otherProfile?.is_online ? "● Live Human Online" : "🪞 Offline · AI Replica Standby"}</span>
           </div>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          {/* Offline Replica Auto-Responder Toggle */}
+          {!otherProfile?.is_online && (
+            <button
+              type="button"
+              onClick={() => setAutoReplicaMode(!autoReplicaMode)}
+              title="Toggle automatic replies from this user's AI Replica while they are offline"
+              style={{
+                background: autoReplicaMode ? "rgba(168,85,247,0.15)" : "rgba(255,255,255,0.05)",
+                border: autoReplicaMode ? "1px solid rgba(168,85,247,0.45)" : `1px solid ${T.border}`,
+                borderRadius: 8,
+                color: autoReplicaMode ? "#c084fc" : T.muted,
+                fontSize: 11,
+                fontWeight: 600,
+                cursor: "pointer",
+                padding: "6px 10px",
+                fontFamily: T.font,
+              }}
+            >
+              {autoReplicaMode ? "🪞 Auto-Replica: ON" : "🪞 Auto-Replica: OFF"}
+            </button>
+          )}
+
+          {/* Morning Catch-Up Digest button */}
+          {directMessages.length >= 3 && (
+            <button
+              type="button"
+              onClick={generateCatchUpDigest}
+              disabled={summarizingDigest}
+              title="Generate a 3-bullet Catch-Up Digest of this conversation"
+              style={{
+                background: "hsla(119,99%,46%,0.1)",
+                border: "1px solid hsla(119,99%,46%,0.35)",
+                borderRadius: 8,
+                color: T.primary,
+                fontSize: 11,
+                fontWeight: 600,
+                cursor: summarizingDigest ? "wait" : "pointer",
+                padding: "6px 10px",
+                fontFamily: T.font,
+              }}
+            >
+              {summarizingDigest ? "⏳ Summarizing…" : "☀️ Catch-Up Digest"}
+            </button>
+          )}
+
           {/* Clear history button */}
           {directMessages.length > 0 && (
             <button
@@ -265,67 +472,74 @@ export default function DMWindow({
                 color: T.muted,
                 fontSize: 12,
                 cursor: "pointer",
-                padding: "7px 10px",
-                display: "flex",
-                alignItems: "center",
-                gap: 4,
+                padding: "6px 9px",
                 fontFamily: T.font,
-                transition: "all 0.15s",
-              }}
-              onMouseEnter={e => {
-                const el = e.currentTarget
-                el.style.background = "rgba(248,113,113,0.15)"
-                el.style.borderColor = "rgba(248,113,113,0.3)"
-                el.style.color = T.red
-              }}
-              onMouseLeave={e => {
-                const el = e.currentTarget
-                el.style.background = "rgba(255,255,255,0.05)"
-                el.style.borderColor = T.border
-                el.style.color = T.muted
               }}
             >
-              <span>🧹</span>
+              🧹
             </button>
           )}
 
-          {/* Replica button */}
+          {/* Clone Replica button */}
           <button
             disabled={creating}
             onClick={createReplica}
-            title="Create a replica bot based on this person's chat style"
+            title="Create a standalone replica bot based on this person's chat style"
             style={{
               background: "transparent",
               border: "1px solid rgba(168,85,247,0.4)",
               borderRadius: 8,
               color: "#a855f7",
-              fontSize: 12,
+              fontSize: 11,
               fontWeight: 600,
               cursor: creating ? "not-allowed" : "pointer",
-              padding: "7px 12px",
+              padding: "6px 10px",
               flexShrink: 0,
               opacity: creating ? 0.5 : 1,
               fontFamily: T.font,
-              transition: "background 0.15s, border-color 0.15s",
-              letterSpacing: "0.01em",
-            }}
-            onMouseEnter={e => {
-              if (!creating) {
-                const el = e.currentTarget
-                el.style.background = "rgba(168,85,247,0.12)"
-                el.style.borderColor = "rgba(168,85,247,0.6)"
-              }
-            }}
-            onMouseLeave={e => {
-              const el = e.currentTarget
-              el.style.background = "transparent"
-              el.style.borderColor = "rgba(168,85,247,0.4)"
             }}
           >
-            {creating ? "⏳ Creating…" : "🪞 Replica"}
+            {creating ? "⏳ Cloning…" : "🪞 Clone Bot"}
           </button>
         </div>
       </div>
+
+      {/* ── Creative Feature: Morning Catch-Up Digest Banner ──────── */}
+      {catchUpSummary && (
+        <div style={{
+          margin: "10px 16px 0",
+          padding: "12px 16px",
+          background: "rgba(168,85,247,0.1)",
+          border: "1px solid rgba(168,85,247,0.35)",
+          borderRadius: 12,
+          fontSize: 12,
+          color: T.text,
+          lineHeight: 1.55,
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          gap: 12,
+        }}>
+          <div>
+            <div style={{ fontWeight: 700, color: "#c084fc", marginBottom: 4, display: "flex", alignItems: "center", gap: 6 }}>
+              <span>☀️</span> Conversation &amp; Offline Replica Catch-Up Digest
+            </div>
+            <div style={{ whiteSpace: "pre-line", color: "#e5e7eb" }}>{catchUpSummary}</div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setCatchUpSummary(null)}
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "#c084fc",
+              cursor: "pointer",
+              fontSize: 15,
+              padding: "0 4px",
+            }}
+          >✕</button>
+        </div>
+      )}
 
       {/* ── Messages ───────────────────────────────────────────── */}
       <div
@@ -357,23 +571,27 @@ export default function DMWindow({
             <div style={{ fontWeight: 600, color: T.text, fontSize: 15 }}>
               Start a conversation with {other?.display_name || other?.username}
             </div>
-            <p style={{ margin: 0, maxWidth: 300, lineHeight: 1.6 }}>
-              Send a direct message below. Once you exchange 5+ messages, you can generate an AI persona replica!
+            <p style={{ margin: 0, maxWidth: 340, lineHeight: 1.6 }}>
+              Send a direct message below. If they are offline, their <strong>🪞 AI Replica</strong> can reply automatically—or type <code>@ai</code> to summon Kikar AI Co-Pilot into your chat!
             </p>
           </div>
         )}
 
         {directMessages.map((m: any, i: number) => {
-          const isUser = m.sender_id === session.user.id
-          const isImage = m.content?.startsWith("[image]:")
-          const imageUrl = isImage ? m.content.replace("[image]:", "") : null
+          const replicaMatch = typeof m.content === "string" ? m.content.match(/^\[replica:(.*?)\]:\s*([\s\S]*)$/i) : null
+          const replicaBadge = replicaMatch ? replicaMatch[1] : m.is_replica_reply ? "🪞 AI Replica" : null
+          const displayContent = replicaMatch ? replicaMatch[2] : m.content
+
+          const isAiCoPilot = replicaBadge?.includes("Co-Pilot")
+          const isUser = m.sender_id === session.user.id && !isAiCoPilot
+          const isImage = displayContent?.startsWith("[image]:")
+          const imageUrl = isImage ? displayContent.replace("[image]:", "") : null
           const showDate = i === 0 || formatDate(m.created_at) !== formatDate(directMessages[i - 1].created_at)
           const msgId = m.id ?? `dm-${i}`
           const isHovered = hoveredMsgId === msgId
 
           return (
             <div key={msgId}>
-              {/* Date separator */}
               {showDate && (
                 <div style={{
                   display: "flex",
@@ -397,23 +615,39 @@ export default function DMWindow({
                 </div>
               )}
 
-              <div 
+              <div
                 onMouseEnter={() => setHoveredMsgId(msgId)}
                 onMouseLeave={() => setHoveredMsgId(null)}
-                style={{ 
-                  display: "flex", 
+                style={{
+                  display: "flex",
                   flexDirection: isUser ? "row-reverse" : "row",
                   alignItems: "flex-end",
                   gap: 8,
                   marginBottom: 4,
                 }}
               >
-                <div style={{ 
-                  display: "flex", 
-                  flexDirection: "column", 
+                <div style={{
+                  display: "flex",
+                  flexDirection: "column",
                   alignItems: isUser ? "flex-end" : "flex-start",
-                  maxWidth: "70%",
+                  maxWidth: "72%",
                 }}>
+                  {/* AI Replica / Co-Pilot Transparency Badge */}
+                  {replicaBadge && (
+                    <div style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      color: isAiCoPilot ? T.primary : "#c084fc",
+                      background: isAiCoPilot ? "hsla(119,99%,46%,0.12)" : "rgba(168,85,247,0.14)",
+                      border: isAiCoPilot ? "1px solid hsla(119,99%,46%,0.3)" : "1px solid rgba(168,85,247,0.3)",
+                      borderRadius: 999,
+                      padding: "2px 8px",
+                      marginBottom: 4,
+                    }}>
+                      {replicaBadge}
+                    </div>
+                  )}
+
                   <div
                     className="cc-bubble"
                     style={{
@@ -428,9 +662,15 @@ export default function DMWindow({
                         ? "transparent"
                         : isUser
                         ? "linear-gradient(135deg, hsl(119,99%,46%) 0%, hsl(119,99%,38%) 100%)"
+                        : replicaBadge
+                        ? "rgba(168,85,247,0.12)"
                         : T.surface,
                       color: isUser ? T.primaryFg : T.text,
-                      border: isUser || isImage ? "none" : `1px solid ${T.border}`,
+                      border: isUser || isImage
+                        ? "none"
+                        : replicaBadge
+                        ? "1px solid rgba(168,85,247,0.35)"
+                        : `1px solid ${T.border}`,
                       boxShadow: isUser ? "0 2px 12px hsla(119,99%,46%,0.2)" : "none",
                       fontWeight: isUser ? 500 : 400,
                       animation: "fade-in 0.2s ease both",
@@ -440,8 +680,8 @@ export default function DMWindow({
                       ? <img src={imageUrl!}
                           alt="Attachment"
                           style={{ maxWidth: 240, maxHeight: 280, borderRadius: 10, display: "block", cursor: "pointer" }}
-                          onClick={() => window.open(imageUrl!, '_blank')} />
-                      : m.content}
+                          onClick={() => window.open(imageUrl!, "_blank")} />
+                      : displayContent}
                   </div>
 
                   {/* Timestamp + read receipt */}
@@ -461,16 +701,35 @@ export default function DMWindow({
                   </div>
                 </div>
 
-                {/* Message Hover Actions */}
+                {/* Message Hover Actions (Voice Note TTS + Copy + Delete) */}
                 <div style={{
                   display: "flex",
                   alignItems: "center",
                   gap: 4,
-                  opacity: isHovered ? 1 : 0,
+                  opacity: isHovered || speakingMsgId === msgId ? 1 : 0,
                   transition: "opacity 0.15s ease",
                   marginBottom: 16,
-                  pointerEvents: isHovered ? "auto" : "none",
+                  pointerEvents: isHovered || speakingMsgId === msgId ? "auto" : "none",
                 }}>
+                  {!isImage && (
+                    <button
+                      type="button"
+                      title={speakingMsgId === msgId ? "Stop voice playback" : "Play message aloud"}
+                      onClick={() => handleSpeakToggle(displayContent, msgId)}
+                      style={{
+                        background: speakingMsgId === msgId ? "hsla(119,99%,46%,0.2)" : "rgba(255,255,255,0.06)",
+                        border: `1px solid ${speakingMsgId === msgId ? T.primary : T.border}`,
+                        borderRadius: 6,
+                        color: speakingMsgId === msgId ? T.primary : T.muted,
+                        fontSize: 11,
+                        cursor: "pointer",
+                        padding: "3px 6px",
+                      }}
+                    >
+                      {speakingMsgId === msgId ? "⏹️" : "🔊"}
+                    </button>
+                  )}
+
                   <button
                     type="button"
                     title="Copy message"
@@ -483,14 +742,12 @@ export default function DMWindow({
                       fontSize: 11,
                       cursor: "pointer",
                       padding: "3px 6px",
-                      display: "flex",
-                      alignItems: "center",
                     }}
                   >
                     {copiedId === msgId ? "✓" : "📋"}
                   </button>
 
-                  {isUser && (
+                  {m.sender_id === session.user.id && (
                     <button
                       type="button"
                       title="Delete message"
@@ -503,11 +760,7 @@ export default function DMWindow({
                         fontSize: 11,
                         cursor: "pointer",
                         padding: "3px 6px",
-                        display: "flex",
-                        alignItems: "center",
                       }}
-                      onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = T.red}
-                      onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = T.muted2}
                     >
                       🗑️
                     </button>
@@ -517,6 +770,21 @@ export default function DMWindow({
             </div>
           )
         })}
+
+        {replicaTyping && (
+          <div style={{
+            fontSize: 11,
+            color: "#c084fc",
+            padding: "6px 12px",
+            background: "rgba(168,85,247,0.1)",
+            border: "1px solid rgba(168,85,247,0.25)",
+            borderRadius: 999,
+            alignSelf: "flex-start",
+          }}>
+            🪞 AI Persona is typing a reply…
+          </div>
+        )}
+
         <div ref={bottomRef} style={{ height: 4 }} />
       </div>
 
@@ -551,16 +819,43 @@ export default function DMWindow({
             alignItems: "center",
             justifyContent: "center",
             opacity: uploadingImage ? 0.5 : 1,
-            transition: "border-color 0.15s",
           }}
         >{uploadingImage ? "⏳" : "🖼️"}</button>
+
+        {/* Quick @ai Co-Pilot trigger chip */}
+        <button
+          type="button"
+          onClick={() => {
+            if (!input.startsWith("@ai ")) setInput(`@ai ${input}`)
+          }}
+          title="Summon Kikar AI Co-Pilot into this DM conversation"
+          style={{
+            padding: "0 11px",
+            height: 36,
+            borderRadius: 999,
+            background: input.startsWith("@ai") ? "hsla(119,99%,46%,0.18)" : T.bgAlt,
+            border: input.startsWith("@ai") ? `1px solid ${T.primary}` : `1px solid ${T.border}`,
+            color: input.startsWith("@ai") ? T.primary : T.muted,
+            fontSize: 11,
+            fontWeight: 700,
+            cursor: "pointer",
+            fontFamily: T.font,
+            flexShrink: 0,
+          }}
+        >
+          ✦ @ai
+        </button>
 
         <input
           className="cc-chat-input"
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={e => e.key === "Enter" && sendDirectMessage()}
-          placeholder="Type a message…"
+          placeholder={
+            !otherProfile?.is_online && autoReplicaMode
+              ? `Message ${other?.display_name || other?.username}'s AI Replica (or type @ai)…`
+              : "Type a message (or @ai to summon AI Co-Pilot)…"
+          }
           style={{
             flex: 1,
             padding: "11px 16px",
@@ -571,15 +866,6 @@ export default function DMWindow({
             outline: "none",
             fontSize: 14,
             fontFamily: T.font,
-            transition: "border-color 0.18s, box-shadow 0.18s",
-          }}
-          onFocus={e => {
-            e.target.style.borderColor = "hsla(119,99%,46%,0.4)"
-            e.target.style.boxShadow = "0 0 0 3px hsla(119,99%,46%,0.07)"
-          }}
-          onBlur={e => {
-            e.target.style.borderColor = T.border
-            e.target.style.boxShadow = "none"
           }}
         />
 
@@ -601,7 +887,6 @@ export default function DMWindow({
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            transition: "all 0.18s",
             boxShadow: !input.trim() ? "none" : "0 2px 12px hsla(119,99%,46%,0.3)",
           }}
         >↑</button>

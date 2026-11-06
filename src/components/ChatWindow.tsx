@@ -2,7 +2,8 @@
 import { useEffect, useRef, useState } from "react"
 import { supabase } from "../lib/supabase"
 import { T } from "../styles"
-import { showNotification } from "../lib/helpers"
+import { showNotification, speakMessageText, stopSpeakingText } from "../lib/helpers"
+import type { PlanTier, UsageQuota } from "../lib/types"
 
 interface Props {
   session: any
@@ -14,17 +15,39 @@ interface Props {
   setCreating: (v: boolean) => void
   onDeleteCharacter?: (id: string) => void
   onEditChar?: (char: any) => void
+  planTier?: PlanTier
+  quota?: UsageQuota | null
+  onConsumeChatQuota?: () => boolean
+  onConsumeImageQuota?: () => boolean
+  onOpenPricing?: () => void
 }
 
 export default function ChatWindow({
-  session, activeChar, messages, setMessages, onBack, creating, setCreating, onDeleteCharacter, onEditChar
+  session,
+  activeChar,
+  messages,
+  setMessages,
+  onBack,
+  creating,
+  setCreating,
+  onDeleteCharacter,
+  onEditChar,
+  planTier = "free",
+  quota,
+  onConsumeChatQuota,
+  onConsumeImageQuota,
+  onOpenPricing,
 }: Props) {
   const [input, setInput] = useState("")
   const [loading, setLoading] = useState(false)
   const [generatingImg, setGeneratingImg] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [hoveredMsgId, setHoveredMsgId] = useState<string | null>(null)
+  const [speakingMsgId, setSpeakingMsgId] = useState<string | null>(null)
   const [recalledMemories, setRecalledMemories] = useState<string[]>([])
+  const [showReportModal, setShowReportModal] = useState(false)
+  const [reportReason, setReportReason] = useState("Inaccurate or inappropriate AI response")
+  const [reportSubmitted, setReportSubmitted] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -33,37 +56,47 @@ export default function ChatWindow({
 
   async function sendMessage() {
     if (!input.trim() || !activeChar || loading || !session) return
+
+    // Check daily chat quota before calling LLM
+    if (onConsumeChatQuota && !onConsumeChatQuota()) {
+      if (onOpenPricing) onOpenPricing()
+      return
+    }
+
     const userMsg = { role: "user", content: input, character_id: activeChar.id, user_id: session.user.id }
     setMessages((prev: any) => [...prev, { ...userMsg, id: `temp-${Date.now()}` }])
-    setInput(""); setLoading(true)
+    setInput("")
+    setLoading(true)
 
     try {
       const { data: insertedUserMsg } = await supabase.from("messages").insert(userMsg).select().single()
       const history = [...messages, userMsg].map(m => ({ role: m.role, content: m.content }))
-      
+
       const res = await fetch("/api/chat", {
-        method: "POST", 
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           messages: history,
           systemPrompt: activeChar.system_prompt,
+          userId: session.user.id,
+          planTier,
           chatId: `${session.user.id}_${activeChar.id}`,
-        })
+        }),
       })
       const data = await res.json()
-      
+
       if (Array.isArray(data.memoriesRecalled) && data.memoriesRecalled.length > 0) {
         setRecalledMemories(data.memoriesRecalled)
       }
-      
+
       const aiReply = data.reply || "Sorry, I couldn't generate a response."
       const aiMsg = { role: "assistant", content: aiReply, character_id: activeChar.id, user_id: session.user.id }
       const { data: insertedAiMsg } = await supabase.from("messages").insert(aiMsg).select().single()
-      
+
       setMessages((prev: any) => [
         ...prev.filter((m: any) => !m.id?.startsWith("temp-")),
         insertedUserMsg || userMsg,
-        insertedAiMsg || aiMsg
+        insertedAiMsg || aiMsg,
       ])
       showNotification(activeChar.name, aiReply)
     } catch (err) {
@@ -76,14 +109,20 @@ export default function ChatWindow({
 
   async function handleGenerateImage() {
     if (!input.trim() || !activeChar || !session) return
+
+    if (onConsumeImageQuota && !onConsumeImageQuota()) {
+      if (onOpenPricing) onOpenPricing()
+      return
+    }
+
     setGeneratingImg(true)
     const promptText = input
     setInput("")
     try {
       const res = await fetch("/api/generate-image", {
-        method: "POST", 
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: promptText }),
+        body: JSON.stringify({ prompt: promptText, userId: session.user.id }),
       })
       if (!res.ok) throw new Error(`Status: ${res.status}`)
       const data = await res.json()
@@ -101,8 +140,7 @@ export default function ChatWindow({
   }
 
   async function handleStartNewChat() {
-    if (!activeChar || !session) return
-    if (messages.length === 0) return
+    if (!activeChar || !session || messages.length === 0) return
     if (window.confirm(`Start a fresh new chat session with ${activeChar.name}? This will clear your chat history with this bot.`)) {
       await supabase.from("messages").delete()
         .eq("character_id", activeChar.id)
@@ -127,6 +165,30 @@ export default function ChatWindow({
       setCopiedId(id)
       setTimeout(() => setCopiedId(null), 2000)
     })
+  }
+
+  function handleSpeakToggle(content: string, id: string) {
+    if (speakingMsgId === id) {
+      stopSpeakingText()
+      setSpeakingMsgId(null)
+      return
+    }
+    setSpeakingMsgId(id)
+    speakMessageText(content, () => setSpeakingMsgId(null))
+  }
+
+  async function handleSubmitReport() {
+    if (!session || !activeChar) return
+    await supabase.from("character_reports").insert({
+      reporter_id: session.user.id,
+      character_id: activeChar.id,
+      reason: reportReason,
+    })
+    setReportSubmitted(true)
+    setTimeout(() => {
+      setReportSubmitted(false)
+      setShowReportModal(false)
+    }, 1500)
   }
 
   function handleDeleteBot() {
@@ -158,12 +220,13 @@ export default function ChatWindow({
 
     const sampleMessages = msgs.map((m: any) => m.content).join("\n")
     const res = await fetch("/api/chat", {
-      method: "POST", 
+      method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         messages: [{ role: "user", content: `Analyze the writing style, personality, tone, vocabulary, and communication patterns from these messages. Write a system prompt (max 200 words) for an AI to perfectly impersonate this person.\n\nMessages:\n${sampleMessages}` }],
-        systemPrompt: "You are an expert at analyzing writing styles. Return only the system prompt text, nothing else."
-      })
+        systemPrompt: "You are an expert at analyzing writing styles. Return only the system prompt text, nothing else.",
+        userId: session.user.id,
+      }),
     })
     const data = await res.json()
     const system_prompt = `${data.reply} Never break character. Match the original person's typical message length and style exactly.`
@@ -181,7 +244,7 @@ export default function ChatWindow({
         created_by: session.user.id,
         is_replica: true,
         replica_of: session.user.id,
-        is_public: false
+        is_public: false,
       })
       .select().single()
 
@@ -212,6 +275,7 @@ export default function ChatWindow({
         background: T.surface,
         borderBottom: `1px solid ${T.border}`,
         flexShrink: 0,
+        flexWrap: "wrap",
       }}>
         <button
           className="cc-back-btn"
@@ -249,20 +313,18 @@ export default function ChatWindow({
           flexShrink: 0,
         }}>{activeChar.emoji}</div>
 
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ flex: 1, minWidth: 140 }}>
           <div style={{ fontSize: 15, fontWeight: 600, color: T.text, letterSpacing: "-0.02em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {activeChar.name}
           </div>
-          <div style={{ fontSize: 11, color: T.muted, marginTop: 2, display: "flex", alignItems: "center", gap: 6 }}>
+          <div style={{ fontSize: 11, color: T.muted, marginTop: 2, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
             {isReplica ? (
-              <span style={{ color: "#a855f7" }}>🪞 Replica</span>
+              <span style={{ color: "#a855f7", fontWeight: 600 }}>🪞 Digital Replica</span>
             ) : isOwner ? (
               <span style={{ color: T.primary }}>✦ Your Custom Bot</span>
             ) : (
               <span>✦ AI Character</span>
             )}
-            <span>·</span>
-            <span>Private Chat</span>
             <span>·</span>
             <span
               style={{
@@ -277,16 +339,39 @@ export default function ChatWindow({
                 fontSize: 10,
                 fontWeight: 600,
               }}
-              title="ChatSorter AI Memory: Automatically stores facts and recalls long-term context across conversations"
+              title="ChatSorter AI Memory: Recalls user-scoped context across conversations"
             >
-              🧠 ChatSorter Memory
+              🧠 Memory Active
             </span>
           </div>
         </div>
 
         {/* Header Action Buttons */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {/* New Chat / Reset Chat Button */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          {/* Quota / Plan Pill */}
+          {onOpenPricing && (
+            <button
+              type="button"
+              onClick={onOpenPricing}
+              title="View plan and remaining daily AI credits"
+              style={{
+                background: planTier === "free" ? "rgba(255,255,255,0.05)" : "hsla(119,99%,46%,0.14)",
+                border: planTier === "free" ? `1px solid ${T.border}` : `1px solid ${T.primary}`,
+                borderRadius: 8,
+                color: planTier === "free" ? T.text : T.primary,
+                fontSize: 11,
+                fontWeight: 700,
+                cursor: "pointer",
+                padding: "6px 10px",
+                fontFamily: T.font,
+              }}
+            >
+              ⚡ {planTier.toUpperCase()}{" "}
+              {quota ? `(${Math.max(0, quota.daily_chat_limit - quota.daily_chat_used)} left)` : ""}
+            </button>
+          )}
+
+          {/* New Chat Button */}
           <button
             type="button"
             onClick={handleStartNewChat}
@@ -300,31 +385,12 @@ export default function ChatWindow({
               fontSize: 12,
               fontWeight: 600,
               cursor: messages.length === 0 ? "default" : "pointer",
-              padding: "7px 12px",
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
+              padding: "6px 10px",
               opacity: messages.length === 0 ? 0.5 : 1,
               fontFamily: T.font,
-              transition: "all 0.15s ease",
-            }}
-            onMouseEnter={e => {
-              if (messages.length > 0) {
-                const el = e.currentTarget
-                el.style.background = "hsla(119,99%,46%,0.12)"
-                el.style.borderColor = "hsla(119,99%,46%,0.4)"
-                el.style.color = T.primary
-              }
-            }}
-            onMouseLeave={e => {
-              const el = e.currentTarget
-              el.style.background = "rgba(255,255,255,0.05)"
-              el.style.borderColor = T.border
-              el.style.color = messages.length === 0 ? T.muted2 : T.text
             }}
           >
-            <span>✨</span>
-            <span style={{ display: "inline" }}>New Chat</span>
+            ✨ Reset
           </button>
 
           {/* Edit Bot if user created */}
@@ -340,25 +406,10 @@ export default function ChatWindow({
                 color: T.muted,
                 fontSize: 12,
                 cursor: "pointer",
-                padding: "7px 10px",
-                display: "flex",
-                alignItems: "center",
-                gap: 4,
-                fontFamily: T.font,
-                transition: "all 0.15s ease",
-              }}
-              onMouseEnter={e => {
-                const el = e.currentTarget
-                el.style.background = "rgba(255,255,255,0.1)"
-                el.style.color = T.text
-              }}
-              onMouseLeave={e => {
-                const el = e.currentTarget
-                el.style.background = "rgba(255,255,255,0.05)"
-                el.style.color = T.muted
+                padding: "6px 9px",
               }}
             >
-              <span>✏️</span>
+              ✏️
             </button>
           )}
 
@@ -375,27 +426,30 @@ export default function ChatWindow({
                 color: T.red,
                 fontSize: 12,
                 cursor: "pointer",
-                padding: "7px 10px",
-                display: "flex",
-                alignItems: "center",
-                gap: 4,
-                fontFamily: T.font,
-                transition: "all 0.15s ease",
-              }}
-              onMouseEnter={e => {
-                const el = e.currentTarget
-                el.style.background = "rgba(248,113,113,0.2)"
-                el.style.borderColor = "rgba(248,113,113,0.4)"
-              }}
-              onMouseLeave={e => {
-                const el = e.currentTarget
-                el.style.background = "rgba(248,113,113,0.08)"
-                el.style.borderColor = "rgba(248,113,113,0.2)"
+                padding: "6px 9px",
               }}
             >
-              <span>🗑️</span>
+              🗑️
             </button>
           )}
+
+          {/* Safety Report Button (Google Play UGC Compliance) */}
+          <button
+            type="button"
+            onClick={() => setShowReportModal(true)}
+            title="Report unsafe or inappropriate AI behavior"
+            style={{
+              background: "rgba(255,255,255,0.05)",
+              border: `1px solid ${T.border}`,
+              borderRadius: 8,
+              color: T.muted,
+              fontSize: 12,
+              cursor: "pointer",
+              padding: "6px 9px",
+            }}
+          >
+            🚩
+          </button>
 
           {/* Create Replica button */}
           <button
@@ -410,30 +464,94 @@ export default function ChatWindow({
               fontSize: 12,
               fontWeight: 600,
               cursor: creating ? "not-allowed" : "pointer",
-              padding: "7px 12px",
+              padding: "6px 10px",
               flexShrink: 0,
               opacity: creating ? 0.5 : 1,
               fontFamily: T.font,
-              transition: "background 0.15s, border-color 0.15s",
-              letterSpacing: "0.01em",
-            }}
-            onMouseEnter={e => {
-              if (!creating) {
-                const el = e.currentTarget
-                el.style.background = "rgba(168,85,247,0.12)"
-                el.style.borderColor = "rgba(168,85,247,0.6)"
-              }
-            }}
-            onMouseLeave={e => {
-              const el = e.currentTarget
-              el.style.background = "transparent"
-              el.style.borderColor = "rgba(168,85,247,0.4)"
             }}
           >
             {creating ? "⏳ Creating…" : "🪞 My Replica"}
           </button>
         </div>
       </div>
+
+      {/* ── Safety Report Modal ──────────────────────────────────── */}
+      {showReportModal && (
+        <div style={{
+          margin: "8px 16px 0",
+          padding: "12px 16px",
+          background: T.surface,
+          border: "1px solid rgba(248,113,113,0.35)",
+          borderRadius: 12,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 10,
+          flexWrap: "wrap",
+        }}>
+          {reportSubmitted ? (
+            <span style={{ fontSize: 12, color: T.primary, fontWeight: 600 }}>
+              ✓ Thank you. Your safety report has been logged for moderation review.
+            </span>
+          ) : (
+            <>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: T.red }}>🚩 Report Character:</span>
+                <select
+                  value={reportReason}
+                  onChange={e => setReportReason(e.target.value)}
+                  style={{
+                    background: T.bgAlt,
+                    border: `1px solid ${T.border}`,
+                    borderRadius: 8,
+                    color: T.text,
+                    fontSize: 12,
+                    padding: "5px 10px",
+                    fontFamily: T.font,
+                  }}
+                >
+                  <option value="Inaccurate or inappropriate AI response">Inaccurate or inappropriate AI response</option>
+                  <option value="Unauthorized impersonation">Unauthorized impersonation</option>
+                  <option value="Spam or harmful prompt">Spam or harmful prompt</option>
+                </select>
+              </div>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button
+                  type="button"
+                  onClick={handleSubmitReport}
+                  style={{
+                    background: T.red,
+                    border: "none",
+                    borderRadius: 8,
+                    color: "#000",
+                    fontSize: 11,
+                    fontWeight: 700,
+                    padding: "6px 12px",
+                    cursor: "pointer",
+                  }}
+                >
+                  Submit Report
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowReportModal(false)}
+                  style={{
+                    background: "transparent",
+                    border: `1px solid ${T.border}`,
+                    borderRadius: 8,
+                    color: T.muted,
+                    fontSize: 11,
+                    padding: "6px 10px",
+                    cursor: "pointer",
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {/* ── ChatSorter Recalled Memories Banner ──────────────────── */}
       {recalledMemories.length > 0 && (
@@ -518,13 +636,13 @@ export default function ChatWindow({
                 Chat with {activeChar.name}
               </div>
               <p style={{ margin: 0, maxWidth: 360 }}>
-                {activeChar.system_prompt 
+                {activeChar.system_prompt
                   ? activeChar.system_prompt.replace(/You are .*?\. /i, "").substring(0, 140) + "…"
                   : "Say hello or ask anything — this chat is private and saved."}
               </p>
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center", marginTop: 8 }}>
-              {["👋 Hello!", "Tell me about yourself", "What can you do?"].map(preset => (
+              {["👋 Hello!", "Tell me about yourself", "Give me your best advice"].map(preset => (
                 <button
                   key={preset}
                   onClick={() => { setInput(preset) }}
@@ -537,17 +655,6 @@ export default function ChatWindow({
                     fontSize: 12,
                     cursor: "pointer",
                     fontFamily: T.font,
-                    transition: "all 0.15s ease",
-                  }}
-                  onMouseEnter={e => {
-                    const el = e.currentTarget
-                    el.style.borderColor = "hsla(119,99%,46%,0.4)"
-                    el.style.color = T.primary
-                  }}
-                  onMouseLeave={e => {
-                    const el = e.currentTarget
-                    el.style.borderColor = T.border
-                    el.style.color = T.text
                   }}
                 >
                   {preset}
@@ -603,26 +710,44 @@ export default function ChatWindow({
                 }}
               >
                 {isImage ? (
-                  <img 
-                    src={imageUrl!} 
+                  <img
+                    src={imageUrl!}
                     alt="Generated output"
-                    style={{ width: "100%", maxWidth: 280, borderRadius: 10, display: "block" }} 
+                    style={{ width: "100%", maxWidth: 280, borderRadius: 10, display: "block" }}
                   />
                 ) : (
                   m.content
                 )}
               </div>
 
-              {/* Message Action Toolbar on Hover */}
+              {/* Message Action Toolbar on Hover (Voice Note TTS + Copy + Delete) */}
               <div style={{
                 display: "flex",
                 alignItems: "center",
                 gap: 4,
-                opacity: isHovered ? 1 : 0,
+                opacity: isHovered || speakingMsgId === msgId ? 1 : 0,
                 transition: "opacity 0.15s ease",
-                pointerEvents: isHovered ? "auto" : "none",
+                pointerEvents: isHovered || speakingMsgId === msgId ? "auto" : "none",
               }}>
-                {/* Copy button */}
+                {!isImage && (
+                  <button
+                    type="button"
+                    title={speakingMsgId === msgId ? "Stop voice playback" : "Listen to AI voice note"}
+                    onClick={() => handleSpeakToggle(m.content, msgId)}
+                    style={{
+                      background: speakingMsgId === msgId ? "hsla(119,99%,46%,0.2)" : "rgba(255,255,255,0.06)",
+                      border: `1px solid ${speakingMsgId === msgId ? T.primary : T.border}`,
+                      borderRadius: 6,
+                      color: speakingMsgId === msgId ? T.primary : T.muted,
+                      fontSize: 11,
+                      cursor: "pointer",
+                      padding: "3px 6px",
+                    }}
+                  >
+                    {speakingMsgId === msgId ? "⏹️" : "🔊"}
+                  </button>
+                )}
+
                 <button
                   type="button"
                   title="Copy text"
@@ -635,15 +760,11 @@ export default function ChatWindow({
                     fontSize: 11,
                     cursor: "pointer",
                     padding: "3px 6px",
-                    display: "flex",
-                    alignItems: "center",
-                    transition: "all 0.15s",
                   }}
                 >
                   {copiedId === msgId ? "✓ Copied" : "📋"}
                 </button>
 
-                {/* Delete message button */}
                 <button
                   type="button"
                   title="Delete message"
@@ -656,12 +777,7 @@ export default function ChatWindow({
                     fontSize: 11,
                     cursor: "pointer",
                     padding: "3px 6px",
-                    display: "flex",
-                    alignItems: "center",
-                    transition: "all 0.15s",
                   }}
-                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = T.red}
-                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = T.muted2}
                 >
                   🗑️
                 </button>
@@ -722,7 +838,6 @@ export default function ChatWindow({
             alignItems: "center",
             justifyContent: "center",
             opacity: !input.trim() || generatingImg ? 0.5 : 1,
-            transition: "border-color 0.15s, opacity 0.15s",
           }}
         >
           {generatingImg ? "⏳" : "🖼️"}
@@ -744,15 +859,6 @@ export default function ChatWindow({
             outline: "none",
             fontSize: 14,
             fontFamily: T.font,
-            transition: "border-color 0.18s, box-shadow 0.18s",
-          }}
-          onFocus={e => {
-            e.target.style.borderColor = "hsla(119,99%,46%,0.4)"
-            e.target.style.boxShadow = "0 0 0 3px hsla(119,99%,46%,0.07)"
-          }}
-          onBlur={e => {
-            e.target.style.borderColor = T.border
-            e.target.style.boxShadow = "none"
           }}
         />
 
@@ -774,7 +880,6 @@ export default function ChatWindow({
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            transition: "all 0.18s",
             boxShadow: loading || !input.trim() ? "none" : "0 2px 12px hsla(119,99%,46%,0.3)",
           }}
         >↑</button>

@@ -1,3 +1,5 @@
+export type PlanTier = "free" | "plus" | "pro"
+
 export interface Profile {
   id: string
   username: string
@@ -7,6 +9,9 @@ export interface Profile {
   is_online?: boolean
   last_seen?: string
   push_token?: string
+  auto_replica_enabled?: boolean
+  replica_status_note?: string
+  plan_tier?: PlanTier
 }
 
 export interface Character {
@@ -15,8 +20,11 @@ export interface Character {
   emoji: string
   system_prompt: string
   created_by: string
+  is_public?: boolean
   is_replica?: boolean
   replica_of?: string
+  category?: string
+  chat_count?: number
 }
 
 export interface Message {
@@ -42,6 +50,17 @@ export interface DirectMessage {
   conversation_id: string
   sender_id: string
   content: string
+  is_replica_reply?: boolean
+  ai_persona_name?: string
   created_at?: string
   read_at?: string
+}
+
+export interface UsageQuota {
+  user_id: string
+  daily_chat_used: number
+  daily_chat_limit: number
+  monthly_image_used: number
+  monthly_image_limit: number
+  last_daily_reset?: string
 }

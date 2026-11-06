@@ -1,6 +1,7 @@
 "use client"
 import { useState } from "react"
 import { T, S } from "../styles"
+import type { PlanTier } from "../lib/types"
 
 interface Props {
   characters: any[]
@@ -13,19 +14,33 @@ interface Props {
   setView: (v: "ai" | "people") => void
   onOpenProfile: () => void
   onSignOut: () => void
+  planTier?: PlanTier
+  onOpenPricing?: () => void
 }
 
-export default function AIGridView({ 
-  characters, charsLoading, session, onOpenChar, onOpenForm, onEditChar, onDeleteCharacter, setView, onOpenProfile, onSignOut 
+export default function AIGridView({
+  characters,
+  charsLoading,
+  session,
+  onOpenChar,
+  onOpenForm,
+  onEditChar,
+  onDeleteCharacter,
+  setView,
+  onOpenProfile,
+  onSignOut,
+  planTier = "free",
+  onOpenPricing,
 }: Props) {
   const [searchQuery, setSearchQuery] = useState("")
   const [filterTab, setFilterTab] = useState<"all" | "my" | "replicas" | "public">("all")
   const [deletingId, setDeletingId] = useState<string | null>(null)
-  
+
   const filteredChars = characters.filter(c => {
-    const matchesSearch = c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    const matchesSearch =
+      c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (c.system_prompt && c.system_prompt.toLowerCase().includes(searchQuery.toLowerCase()))
-    
+
     if (!matchesSearch) return false
 
     if (filterTab === "my") {
@@ -92,11 +107,9 @@ export default function AIGridView({
         }}
       >
         <div>
-          {/* Top row: Avatar & Action buttons */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
             <div style={S.botAvatar}>{c.emoji}</div>
-            
-            {/* Owner Actions */}
+
             {(isOwner || isReplica) && (
               <div style={{ display: "flex", gap: 6 }} onClick={e => e.stopPropagation()}>
                 {isOwner && !isReplica && onEditChar && (
@@ -116,25 +129,12 @@ export default function AIGridView({
                       color: T.muted,
                       cursor: "pointer",
                       fontSize: 13,
-                      transition: "all 0.15s ease",
-                    }}
-                    onMouseEnter={e => {
-                      const el = e.currentTarget
-                      el.style.background = "hsla(119,99%,46%,0.15)"
-                      el.style.borderColor = "hsla(119,99%,46%,0.4)"
-                      el.style.color = T.primary
-                    }}
-                    onMouseLeave={e => {
-                      const el = e.currentTarget
-                      el.style.background = "rgba(255,255,255,0.06)"
-                      el.style.borderColor = T.border
-                      el.style.color = T.muted
                     }}
                   >
                     ✏️
                   </button>
                 )}
-                
+
                 {onDeleteCharacter && (
                   <button
                     type="button"
@@ -152,19 +152,6 @@ export default function AIGridView({
                       color: T.muted,
                       cursor: "pointer",
                       fontSize: 13,
-                      transition: "all 0.15s ease",
-                    }}
-                    onMouseEnter={e => {
-                      const el = e.currentTarget
-                      el.style.background = "rgba(248,113,113,0.15)"
-                      el.style.borderColor = "rgba(248,113,113,0.4)"
-                      el.style.color = T.red
-                    }}
-                    onMouseLeave={e => {
-                      const el = e.currentTarget
-                      el.style.background = "rgba(255,255,255,0.06)"
-                      el.style.borderColor = T.border
-                      el.style.color = T.muted
                     }}
                   >
                     🗑️
@@ -184,17 +171,20 @@ export default function AIGridView({
               <div style={{ fontSize: 11, color: T.primary, marginTop: 2, fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
                 <span>✦</span> Created by you {c.is_public ? "· Public" : "· Private"}
               </div>
-            ) : null}
+            ) : (
+              <div style={{ fontSize: 11, color: T.muted, marginTop: 2, fontWeight: 500 }}>
+                🌍 Community Persona
+              </div>
+            )}
           </div>
 
           <div style={{ ...S.botDesc, marginTop: 8 }}>
-            {c.system_prompt 
+            {c.system_prompt
               ? c.system_prompt.replace(/You are .*?\. /i, "").substring(0, 110) + (c.system_prompt.length > 110 ? "..." : "")
               : "An AI persona ready to chat."}
           </div>
         </div>
 
-        {/* Start Chat hint footer */}
         <div style={{
           marginTop: 14,
           paddingTop: 10,
@@ -234,25 +224,14 @@ export default function AIGridView({
             fontWeight: 600,
             cursor: "pointer",
             fontFamily: T.font,
-            transition: "all 0.15s",
-          }}
-          onMouseEnter={e => {
-            const el = e.currentTarget
-            el.style.background = "rgba(168,85,247,0.2)"
-            el.style.borderColor = "rgba(168,85,247,0.5)"
-          }}
-          onMouseLeave={e => {
-            const el = e.currentTarget
-            el.style.background = "rgba(168,85,247,0.1)"
-            el.style.borderColor = "rgba(168,85,247,0.3)"
           }}
         >
           <span>◉</span>
-          <span>People</span>
+          <span>People &amp; Replicas</span>
         </button>
 
         {/* Center: Search Bar */}
-        <div style={{ flex: 1, maxWidth: 380, margin: "0 16px" }}>
+        <div style={{ flex: 1, maxWidth: 360, margin: "0 12px" }}>
           <input
             style={{
               width: "100%",
@@ -268,16 +247,40 @@ export default function AIGridView({
             placeholder="Search AI personas..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            onFocus={e => e.target.style.borderColor = "hsla(119,99%,46%,0.5)"}
-            onBlur={e => e.target.style.borderColor = T.border}
           />
         </div>
 
-        {/* Top Right: Profile, Sign Out, Create */}
-        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+        {/* Top Right: Upgrade / Plan, Profile, Sign Out, Create */}
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          {onOpenPricing && (
+            <button
+              type="button"
+              onClick={onOpenPricing}
+              title="Upgrade Kikar Plan"
+              style={{
+                padding: "0 12px",
+                height: 36,
+                background: planTier === "free" ? "rgba(168,85,247,0.14)" : "hsla(119,99%,46%,0.14)",
+                border: planTier === "free" ? "1px solid rgba(168,85,247,0.4)" : `1px solid ${T.primary}`,
+                borderRadius: 10,
+                color: planTier === "free" ? "#c084fc" : T.primary,
+                cursor: "pointer",
+                fontSize: 12,
+                fontWeight: 700,
+                fontFamily: T.font,
+                display: "flex",
+                alignItems: "center",
+                gap: 5,
+              }}
+            >
+              <span>⚡</span>
+              <span>{planTier === "free" ? "Upgrade Plus" : `${planTier.toUpperCase()} Plan`}</span>
+            </button>
+          )}
+
           <button
             onClick={onOpenProfile}
-            title="Profile"
+            title="Profile & Replica Settings"
             style={{
               width: 36,
               height: 36,
@@ -290,17 +293,9 @@ export default function AIGridView({
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              transition: "border-color 0.15s, color 0.15s",
-            }}
-            onMouseEnter={e => {
-              (e.currentTarget as HTMLElement).style.borderColor = T.borderHover
-              ;(e.currentTarget as HTMLElement).style.color = T.text
-            }}
-            onMouseLeave={e => {
-              (e.currentTarget as HTMLElement).style.borderColor = T.border
-              ;(e.currentTarget as HTMLElement).style.color = T.muted
             }}
           >👤</button>
+
           <button
             onClick={onSignOut}
             title="Sign out"
@@ -315,20 +310,9 @@ export default function AIGridView({
               fontSize: 12,
               fontWeight: 600,
               fontFamily: T.font,
-              transition: "border-color 0.15s, color 0.15s",
-            }}
-            onMouseEnter={e => {
-              const el = e.currentTarget
-              el.style.borderColor = "rgba(248,113,113,0.4)"
-              el.style.color = T.red
-            }}
-            onMouseLeave={e => {
-              const el = e.currentTarget
-              el.style.borderColor = T.border
-              el.style.color = T.muted
             }}
           >OUT</button>
-          
+
           <button
             onClick={onOpenForm}
             style={{
@@ -342,18 +326,73 @@ export default function AIGridView({
               cursor: "pointer",
               color: T.primaryFg,
               fontFamily: T.font,
-              letterSpacing: "0.01em",
               boxShadow: "0 4px 16px hsla(119,99%,46%,0.2)",
-              transition: "opacity 0.15s, transform 0.12s",
               display: "flex",
               alignItems: "center",
-              gap: 6
+              gap: 6,
             }}
           >
             <span>+</span> Create Bot
           </button>
         </div>
       </div>
+
+      {/* ── Creative Feature: 24-Hour AI Story Rings & Daily Icebreakers ── */}
+      {characters.length > 0 && (
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 14,
+          padding: "12px 32px",
+          background: T.bg,
+          borderBottom: `1px solid ${T.border}`,
+          overflowX: "auto",
+          flexShrink: 0,
+        }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: T.muted, textTransform: "uppercase", letterSpacing: "0.06em", flexShrink: 0 }}>
+            🔥 Live AI Stories
+          </div>
+          {characters.slice(0, 8).map(c => (
+            <button
+              key={`story-${c.id}`}
+              type="button"
+              onClick={() => onOpenChar(c)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "5px 12px 5px 6px",
+                background: T.surface,
+                border: c.is_replica ? "1.5px solid #a855f7" : "1.5px solid hsla(119,99%,46%,0.45)",
+                borderRadius: 999,
+                cursor: "pointer",
+                flexShrink: 0,
+                fontFamily: T.font,
+              }}
+              title={`Tap to jump into a live conversation with ${c.name}`}
+            >
+              <span style={{
+                width: 26,
+                height: 26,
+                borderRadius: "50%",
+                background: T.bgAlt,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 14,
+              }}>
+                {c.emoji}
+              </span>
+              <span style={{ fontSize: 12, fontWeight: 600, color: T.text }}>
+                {c.name}
+              </span>
+              <span style={{ fontSize: 10, color: c.is_replica ? "#c084fc" : T.primary }}>
+                {c.is_replica ? "🪞 Active" : "✦ Ask me"}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Filter Tabs Bar */}
       <div style={{
@@ -363,12 +402,13 @@ export default function AIGridView({
         borderBottom: `1px solid ${T.border}`,
         background: T.surface,
         flexShrink: 0,
+        overflowX: "auto",
       }}>
         {([
           { id: "all", label: "🌟 All Characters", count: characters.length },
           { id: "my", label: "👤 My Bots", count: characters.filter(c => c.created_by === session?.user?.id || c.is_replica).length },
           { id: "replicas", label: "🪞 Replicas", count: characters.filter(c => c.is_replica).length },
-          { id: "public", label: "🌍 Community / Public", count: characters.filter(c => !c.is_replica && c.is_public).length },
+          { id: "public", label: "🌍 Community Marketplace", count: characters.filter(c => !c.is_replica && c.is_public).length },
         ] as const).map(tab => {
           const isActive = filterTab === tab.id
           return (
@@ -388,7 +428,7 @@ export default function AIGridView({
                 display: "flex",
                 alignItems: "center",
                 gap: 6,
-                transition: "all 0.15s",
+                flexShrink: 0,
               }}
             >
               <span>{tab.label}</span>
@@ -409,7 +449,6 @@ export default function AIGridView({
       {/* Grid Container */}
       <div style={S.aiGridContainer}>
         {charsLoading ? (
-          // Shimmers
           Array.from({ length: 8 }).map((_, i) => (
             <div key={i} style={{ ...S.botCard, background: "transparent", borderColor: "transparent" }}>
               <div className="shimmer" style={{ width: 56, height: 56, borderRadius: 14 }} />
@@ -443,31 +482,28 @@ export default function AIGridView({
           </div>
         ) : filterTab === "all" ? (
           <>
-            {/* Replicas Section */}
             {replicas.length > 0 && (
               <>
-                <div style={{ gridColumn: "1 / -1", fontSize: 15, fontWeight: 700, color: T.text, marginTop: 8, borderBottom: `1px solid ${T.border}`, paddingBottom: 8, display: "flex", alignItems: "center", gap: 8, letterSpacing: "-0.01em" }}>
-                  <span>🪞</span> Your Replicas ({replicas.length})
+                <div style={{ gridColumn: "1 / -1", fontSize: 15, fontWeight: 700, color: T.text, marginTop: 8, borderBottom: `1px solid ${T.border}`, paddingBottom: 8, display: "flex", alignItems: "center", gap: 8 }}>
+                  <span>🪞</span> Your Digital Replicas ({replicas.length})
                 </div>
                 {replicas.map(renderCard)}
               </>
             )}
 
-            {/* Private Bots Section */}
             {privateBots.length > 0 && (
               <>
-                <div style={{ gridColumn: "1 / -1", fontSize: 15, fontWeight: 700, color: T.text, marginTop: 20, borderBottom: `1px solid ${T.border}`, paddingBottom: 8, display: "flex", alignItems: "center", gap: 8, letterSpacing: "-0.01em" }}>
+                <div style={{ gridColumn: "1 / -1", fontSize: 15, fontWeight: 700, color: T.text, marginTop: 20, borderBottom: `1px solid ${T.border}`, paddingBottom: 8, display: "flex", alignItems: "center", gap: 8 }}>
                   <span>🔒</span> Custom / Private Bots ({privateBots.length})
                 </div>
                 {privateBots.map(renderCard)}
               </>
             )}
 
-            {/* Public Bots Section */}
             {publicBots.length > 0 && (
               <>
-                <div style={{ gridColumn: "1 / -1", fontSize: 15, fontWeight: 700, color: T.text, marginTop: 20, borderBottom: `1px solid ${T.border}`, paddingBottom: 8, display: "flex", alignItems: "center", gap: 8, letterSpacing: "-0.01em" }}>
-                  <span>🌍</span> Public Characters ({publicBots.length})
+                <div style={{ gridColumn: "1 / -1", fontSize: 15, fontWeight: 700, color: T.text, marginTop: 20, borderBottom: `1px solid ${T.border}`, paddingBottom: 8, display: "flex", alignItems: "center", gap: 8 }}>
+                  <span>🌍</span> Public Marketplace Characters ({publicBots.length})
                 </div>
                 {publicBots.map(renderCard)}
               </>

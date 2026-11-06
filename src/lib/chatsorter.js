@@ -1,27 +1,37 @@
 /**
- * ChatSorter AI Memory Layer Integration (https://chatsorter.com)
- *
- * Scores incoming chat turns and extracts structured facts, narrative summaries,
- * and profile traits to provide persistent long-term memory for Kikar AI personas.
+ * ChatSorter AI Memory Layer Client
+ * API Documentation: https://chatsorter.com
  */
 
-const CHATSORTER_API_URL = "https://api.chatsorter.com";
-
-export function getChatSorterApiKey() {
+function getChatSorterApiKey() {
   const key = process.env.CHATSORTER_API_KEY || "";
-  if (!key || key.includes("your_")) return "";
-  return key.trim();
+  if (!key || key.includes("your_chatsorter_api_key")) return "";
+  return key;
 }
+
+const CHATSORTER_BASE_URL = "https://chatsorter.com";
 
 export function isChatSorterEnabled() {
   return Boolean(getChatSorterApiKey());
 }
 
 /**
- * Searches ChatSorter for relevant long-term memories matching the current message.
- * Default 15s timeout to allow semantic indexing across ChatSorter cloud tiers.
+ * Ensures chatId is always namespaced by userId so memories from one user
+ * chatting with a public character never leak into another user's prompt context.
  */
-export async function searchMemories(chatId, query, timeoutMs = 15000) {
+export function buildScopedChatId(userId, rawChatId) {
+  const cleanRaw = String(rawChatId || "default").trim();
+  if (!userId) return cleanRaw;
+  const cleanUser = String(userId).trim();
+  if (cleanRaw.startsWith(`${cleanUser}_`)) return cleanRaw;
+  return `${cleanUser}_${cleanRaw}`;
+}
+
+/**
+ * Searches ChatSorter for relevant long-term memories matching the current message.
+ * Default 5000ms timeout provides good balance between cloud recall and fast latency.
+ */
+export async function searchMemories(chatId, query, timeoutMs = 5000) {
   const apiKey = getChatSorterApiKey();
   if (!apiKey || !chatId || !query) return [];
 
@@ -29,15 +39,16 @@ export async function searchMemories(chatId, query, timeoutMs = 15000) {
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const res = await fetch(`${CHATSORTER_API_URL}/search`, {
+    const res = await fetch(`${CHATSORTER_BASE_URL}/api/v1/memories/search`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
+        "Authorization": `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
         chat_id: String(chatId),
-        query: String(query).slice(0, 1000),
+        query: String(query),
+        limit: 5,
       }),
       signal: controller.signal,
     });
@@ -45,17 +56,16 @@ export async function searchMemories(chatId, query, timeoutMs = 15000) {
     clearTimeout(timeoutId);
 
     if (!res.ok) {
-      console.warn(`ChatSorter search failed with status: ${res.status}`);
+      console.warn(`ChatSorter search failed with status ${res.status}`);
       return [];
     }
 
     const data = await res.json();
-    if (data?.success && Array.isArray(data.memories)) {
+    if (Array.isArray(data.memories)) {
       return data.memories
-        .map(m => m.summary || m.content || "")
-        .filter(s => typeof s === "string" && s.length > 0);
+        .map(m => (typeof m === "string" ? m : m.fact || m.memory || m.text || ""))
+        .filter(Boolean);
     }
-
     return [];
   } catch (err) {
     if (err?.name === "AbortError") {
@@ -64,41 +74,37 @@ export async function searchMemories(chatId, query, timeoutMs = 15000) {
       console.warn("ChatSorter search error:", err?.message || err);
     }
     return [];
-  } finally {
-    clearTimeout(timeoutId);
   }
 }
 
 /**
- * Sends a message turn to ChatSorter to be scored (1-10) and indexed for long-term memory.
- * Runs non-blocking / asynchronously so it doesn't delay chat responses.
+ * Sends a message turn to ChatSorter to be indexed into memory in the background.
  */
-export async function processMessage(chatId, message) {
+export async function processMessage(chatId, content) {
   const apiKey = getChatSorterApiKey();
-  if (!apiKey || !chatId || !message) return false;
+  if (!apiKey || !chatId || !content) return null;
 
   try {
-    const res = await fetch(`${CHATSORTER_API_URL}/process`, {
+    const res = await fetch(`${CHATSORTER_BASE_URL}/api/v1/memories/process`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
+        "Authorization": `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
         chat_id: String(chatId),
-        message: String(message).slice(0, 2000),
+        message: String(content),
       }),
     });
 
     if (!res.ok) {
-      console.warn(`ChatSorter process returned status: ${res.status}`);
-      return false;
+      console.warn(`ChatSorter process failed with status ${res.status}`);
+      return null;
     }
 
-    const data = await res.json();
-    return Boolean(data?.success);
+    return await res.json();
   } catch (err) {
     console.warn("ChatSorter process error:", err?.message || err);
-    return false;
+    return null;
   }
 }

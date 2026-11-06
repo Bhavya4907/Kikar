@@ -6,6 +6,20 @@ import ElectricBorder from "./ElectricBorder"
 
 const EMOJIS = ["🤖", "🧙", "🦊", "🐉", "👾", "🧠", "🕵️", "🧜", "🦁", "🎭", "👻", "🤡", "🧛", "🦸", "🧝", "🐱", "🐶", "🚀", "⚡", "🔮"]
 
+const CATEGORIES = [
+  { id: "general", label: "🌟 General Companion" },
+  { id: "study",   label: "📚 Study & Coding Mentor" },
+  { id: "roleplay",label: "🎭 Story & Roleplay" },
+  { id: "coach",   label: "💪 Life & Career Coach" },
+  { id: "creator", label: "✨ Creator Digital Twin" },
+]
+
+const BOUNDARY_PRESETS = [
+  "Never agree to lend money or make financial promises",
+  "Never share personal phone numbers, home addresses, or passwords",
+  "Defer scheduling or binding work commitments until the human user is online",
+]
+
 interface Props {
   session: any
   initialChar?: any
@@ -18,24 +32,28 @@ export default function CharacterForm({ session, initialChar, onCreated, onUpdat
   const [newChar, setNewChar] = useState({
     name: initialChar?.name || "",
     emoji: initialChar?.emoji || "🤖",
+    category: initialChar?.category || "general",
     personality: "",
     speakingStyle: "",
-    is_public: initialChar?.is_public ?? false
+    is_public: initialChar?.is_public ?? false,
   })
+
+  // Creative No-Code "Vibe & Boundaries" Sliders
+  const [warmthVsWit, setWarmthVsWit] = useState(50) // 0 = Warm/Empathetic, 100 = Witty/Sarcastic
+  const [replyLength, setReplyLength] = useState(40) // 0 = Short 1-liners, 100 = Detailed paragraphs
+  const [languageMix, setLanguageMix] = useState<"english" | "hinglish" | "multilingual">("english")
+  const [selectedBoundaries, setSelectedBoundaries] = useState<string[]>([BOUNDARY_PRESETS[0], BOUNDARY_PRESETS[1]])
   const [saving, setSaving] = useState(false)
 
-  // Extract personality and speaking style from existing system_prompt if editing
   useEffect(() => {
     if (initialChar) {
       let prompt = initialChar.system_prompt || ""
-      // Remove prefix "You are <name>. "
-      prompt = prompt.replace(new RegExp(`^You are ${initialChar.name}\\.\\s*`, 'i'), "")
-      // Extract Speaking style if present
-      const styleMatch = prompt.match(/Speaking style:\s*(.*?)\.\s*Keep replies/i)
+      prompt = prompt.replace(new RegExp(`^You are ${initialChar.name}\\.\\s*`, "i"), "")
+      const styleMatch = prompt.match(/Speaking style:\s*(.*?)\.\s*(?:Vibe tuning:|Keep replies)/i)
       const speakingStyle = styleMatch ? styleMatch[1] : ""
-      // Remove speaking style and suffix
       const personality = prompt
         .replace(/Speaking style:\s*.*?\.\s*/i, "")
+        .replace(/Vibe tuning:[\s\S]*$/i, "")
         .replace(/Keep replies under \d+ words\.\s*/i, "")
         .replace(/Never break character\.\s*/i, "")
         .trim()
@@ -43,41 +61,79 @@ export default function CharacterForm({ session, initialChar, onCreated, onUpdat
       setNewChar({
         name: initialChar.name || "",
         emoji: initialChar.emoji || "🤖",
+        category: initialChar.category || "general",
         personality: personality || prompt,
         speakingStyle: speakingStyle,
-        is_public: !!initialChar.is_public
+        is_public: !!initialChar.is_public,
       })
     }
   }, [initialChar])
 
+  function toggleBoundary(b: string) {
+    setSelectedBoundaries(prev =>
+      prev.includes(b) ? prev.filter(item => item !== b) : [...prev, b]
+    )
+  }
+
+  function buildVibeDirective() {
+    const toneDesc =
+      warmthVsWit < 35
+        ? "warm, empathetic, supportive, and encouraging"
+        : warmthVsWit > 65
+        ? "witty, playful, sharp, and lightly sarcastic"
+        : "balanced between friendly warmth and clever wit"
+
+    const maxWords = replyLength < 35 ? 35 : replyLength > 70 ? 160 : 85
+    const langDesc =
+      languageMix === "hinglish"
+        ? "Naturally blend casual Hinglish (Hindi + English) expressions where appropriate."
+        : languageMix === "multilingual"
+        ? "Adapt smoothly to whatever language or slang the user writes in."
+        : "Respond in clear, natural English."
+
+    const boundaryText =
+      selectedBoundaries.length > 0
+        ? ` Guardrails: ${selectedBoundaries.join("; ")}.`
+        : ""
+
+    return `Vibe tuning: Maintain a ${toneDesc} tone. ${langDesc}${boundaryText} Keep replies under ${maxWords} words. Never break character.`
+  }
+
   async function handleSave() {
     if (!newChar.name.trim() || !newChar.personality.trim() || !session) return
     setSaving(true)
-    const system_prompt = `You are ${newChar.name}. ${newChar.personality}.${newChar.speakingStyle ? " Speaking style: " + newChar.speakingStyle + "." : ""} Keep replies under 100 words. Never break character.`
-    
+    const vibeDirective = buildVibeDirective()
+    const system_prompt = `You are ${newChar.name}. ${newChar.personality}.${
+      newChar.speakingStyle ? " Speaking style: " + newChar.speakingStyle + "." : ""
+    } ${vibeDirective}`
+
     if (initialChar) {
-      const { data, error } = await supabase.from("characters")
+      const { data, error } = await supabase
+        .from("characters")
         .update({
           name: newChar.name,
           emoji: newChar.emoji,
+          category: newChar.category,
           system_prompt,
-          is_public: newChar.is_public
+          is_public: newChar.is_public,
         })
         .eq("id", initialChar.id)
         .select()
         .single()
-      
+
       if (!error && data && onUpdated) {
         onUpdated(data)
       }
     } else {
-      const { data, error } = await supabase.from("characters")
+      const { data, error } = await supabase
+        .from("characters")
         .insert({
           name: newChar.name,
           emoji: newChar.emoji,
+          category: newChar.category,
           system_prompt,
           created_by: session.user.id,
-          is_public: newChar.is_public
+          is_public: newChar.is_public,
         })
         .select()
         .single()
@@ -125,9 +181,9 @@ export default function CharacterForm({ session, initialChar, onCreated, onUpdat
             fontWeight: 700,
             color: T.text,
             letterSpacing: "-0.03em",
-          }}>{isEditing ? "Edit Character" : "Create a Character"}</h2>
+          }}>{isEditing ? "Edit Character & Vibe" : "Create a Character"}</h2>
           <p style={{ margin: "4px 0 0", fontSize: 12, color: T.muted }}>
-            {isEditing ? "Customize your AI persona's traits and behavior" : "Design a custom AI persona to chat with"}
+            Design your AI persona with custom traits, vibe sliders, and safety boundaries
           </p>
         </div>
       </div>
@@ -160,12 +216,24 @@ export default function CharacterForm({ session, initialChar, onCreated, onUpdat
             fontSize: 28,
             boxShadow: "0 0 20px hsla(119,99%,46%,0.2)",
           }}>{newChar.emoji}</div>
-          <div>
-            <div style={{ fontWeight: 600, fontSize: 16, color: newChar.name ? T.text : T.muted2, letterSpacing: "-0.02em" }}>
-              {newChar.name || "Character name…"}
+          <div style={{ flex: 1 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontWeight: 600, fontSize: 16, color: newChar.name ? T.text : T.muted2, letterSpacing: "-0.02em" }}>
+                {newChar.name || "Character name…"}
+              </span>
+              <span style={{
+                fontSize: 10,
+                padding: "2px 8px",
+                borderRadius: 999,
+                background: "rgba(255,255,255,0.06)",
+                color: T.primary,
+                fontWeight: 600,
+              }}>
+                {CATEGORIES.find(c => c.id === newChar.category)?.label || "Companion"}
+              </span>
             </div>
             <div style={{ fontSize: 12, color: T.muted, marginTop: 3 }}>
-              {newChar.personality ? newChar.personality.slice(0, 65) + (newChar.personality.length > 65 ? "…" : "") : "Personality preview…"}
+              {newChar.personality ? newChar.personality.slice(0, 75) + (newChar.personality.length > 75 ? "…" : "") : "Personality preview…"}
             </div>
           </div>
         </div>
@@ -193,12 +261,47 @@ export default function CharacterForm({ session, initialChar, onCreated, onUpdat
           fontFamily: T.font,
           outline: "none",
           boxSizing: "border-box",
-          transition: "border-color 0.18s, box-shadow 0.18s",
         }}
-        placeholder="e.g. Socrates, Iron Man, Coach Yoda…"
+        placeholder="e.g. Socrates, Coding Sensei, Aarav's Twin…"
         value={newChar.name}
         onChange={e => setNewChar({ ...newChar, name: e.target.value })}
       />
+
+      {/* Category */}
+      <label style={{
+        fontSize: 11,
+        color: T.muted,
+        display: "block",
+        margin: "20px 0 8px",
+        textTransform: "uppercase",
+        letterSpacing: "0.07em",
+        fontWeight: 600,
+      }}>Marketplace Category</label>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        {CATEGORIES.map(cat => {
+          const active = newChar.category === cat.id
+          return (
+            <button
+              key={cat.id}
+              type="button"
+              onClick={() => setNewChar({ ...newChar, category: cat.id })}
+              style={{
+                padding: "8px 12px",
+                borderRadius: 999,
+                fontSize: 12,
+                fontWeight: active ? 700 : 500,
+                background: active ? "hsla(119,99%,46%,0.15)" : T.surface,
+                border: active ? `1px solid ${T.primary}` : `1px solid ${T.border}`,
+                color: active ? T.primary : T.muted,
+                cursor: "pointer",
+                fontFamily: T.font,
+              }}
+            >
+              {cat.label}
+            </button>
+          )
+        })}
+      </div>
 
       {/* Emoji picker */}
       <label style={{
@@ -244,7 +347,7 @@ export default function CharacterForm({ session, initialChar, onCreated, onUpdat
         textTransform: "uppercase",
         letterSpacing: "0.07em",
         fontWeight: 600,
-      }}>Personality *</label>
+      }}>Personality & Backstory *</label>
       <textarea
         style={{
           width: "100%",
@@ -258,11 +361,10 @@ export default function CharacterForm({ session, initialChar, onCreated, onUpdat
           outline: "none",
           resize: "vertical",
           boxSizing: "border-box",
-          transition: "border-color 0.18s, box-shadow 0.18s",
           minHeight: 80,
         }}
         rows={3}
-        placeholder="e.g. A wise philosopher who questions everything and uses the Socratic method"
+        placeholder="e.g. A sharp full-stack startup mentor who explains system design using real-world analogies"
         value={newChar.personality}
         onChange={e => setNewChar({ ...newChar, personality: e.target.value })}
       />
@@ -289,12 +391,124 @@ export default function CharacterForm({ session, initialChar, onCreated, onUpdat
           fontFamily: T.font,
           outline: "none",
           boxSizing: "border-box",
-          transition: "border-color 0.18s, box-shadow 0.18s",
         }}
-        placeholder="e.g. Uses rhetorical questions, very formal, concise"
+        placeholder="e.g. Uses bullet points, asks thought-provoking follow-ups"
         value={newChar.speakingStyle}
         onChange={e => setNewChar({ ...newChar, speakingStyle: e.target.value })}
       />
+
+      {/* ── Creative Feature: Vibe & Boundaries No-Code Tuner ───────── */}
+      <div style={{
+        marginTop: 22,
+        padding: 18,
+        background: T.surface,
+        border: `1px solid ${T.border}`,
+        borderRadius: 14,
+      }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: T.text, marginBottom: 4, display: "flex", alignItems: "center", gap: 6 }}>
+          <span>🎛️</span> Vibe &amp; Boundaries Tuner
+        </div>
+        <p style={{ fontSize: 11, color: T.muted, margin: "0 0 14px" }}>
+          Fine-tune how this persona (or your Digital Replica) responds without writing complex prompt code.
+        </p>
+
+        {/* Tone slider */}
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: T.muted, marginBottom: 4 }}>
+            <span>🤝 Warm &amp; Empathetic</span>
+            <strong style={{ color: T.primary }}>Tone Balance ({warmthVsWit}%)</strong>
+            <span>⚡ Witty &amp; Sarcastic</span>
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={warmthVsWit}
+            onChange={e => setWarmthVsWit(Number(e.target.value))}
+            style={{ width: "100%", accentColor: "hsl(119, 99%, 46%)" }}
+          />
+        </div>
+
+        {/* Length slider */}
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: T.muted, marginBottom: 4 }}>
+            <span>💬 Punchy 1-Liners</span>
+            <strong style={{ color: T.primary }}>Reply Length ({replyLength}%)</strong>
+            <span>📜 Deep Paragraphs</span>
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={replyLength}
+            onChange={e => setReplyLength(Number(e.target.value))}
+            style={{ width: "100%", accentColor: "hsl(119, 99%, 46%)" }}
+          />
+        </div>
+
+        {/* Language mix */}
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 11, color: T.muted, fontWeight: 600, marginBottom: 6 }}>Language Vibe</div>
+          <div style={{ display: "flex", gap: 8 }}>
+            {([
+              { id: "english", label: "🇬🇧 English" },
+              { id: "hinglish", label: "🇮🇳 Hinglish Mix" },
+              { id: "multilingual", label: "🌐 Auto-Adapt" },
+            ] as const).map(lang => (
+              <button
+                key={lang.id}
+                type="button"
+                onClick={() => setLanguageMix(lang.id)}
+                style={{
+                  flex: 1,
+                  padding: "7px 10px",
+                  borderRadius: 8,
+                  fontSize: 11,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  background: languageMix === lang.id ? "hsla(119,99%,46%,0.15)" : T.bgAlt,
+                  border: languageMix === lang.id ? `1px solid ${T.primary}` : `1px solid ${T.border}`,
+                  color: languageMix === lang.id ? T.primary : T.muted,
+                  fontFamily: T.font,
+                }}
+              >
+                {lang.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Safe Boundaries */}
+        <div>
+          <div style={{ fontSize: 11, color: T.muted, fontWeight: 600, marginBottom: 6 }}>Safety &amp; Replica Boundaries</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {BOUNDARY_PRESETS.map(b => {
+              const checked = selectedBoundaries.includes(b)
+              return (
+                <label
+                  key={b}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    fontSize: 12,
+                    color: checked ? T.text : T.muted,
+                    cursor: "pointer",
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggleBoundary(b)}
+                    style={{ accentColor: "hsl(119, 99%, 46%)" }}
+                  />
+                  <span>{b}</span>
+                </label>
+              )
+            })}
+          </div>
+        </div>
+      </div>
 
       {/* Visibility */}
       <label style={{
@@ -320,11 +534,10 @@ export default function CharacterForm({ session, initialChar, onCreated, onUpdat
             cursor: "pointer",
             fontWeight: 600,
             fontFamily: T.font,
-            transition: "all 0.15s ease",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            gap: 6
+            gap: 6,
           }}
         >
           <span>🔒</span> Private
@@ -342,14 +555,13 @@ export default function CharacterForm({ session, initialChar, onCreated, onUpdat
             cursor: "pointer",
             fontWeight: 600,
             fontFamily: T.font,
-            transition: "all 0.15s ease",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            gap: 6
+            gap: 6,
           }}
         >
-          <span>🌍</span> Public
+          <span>🌍</span> Public Marketplace
         </button>
       </div>
 
@@ -369,7 +581,6 @@ export default function CharacterForm({ session, initialChar, onCreated, onUpdat
             fontFamily: T.font,
             fontWeight: 500,
             cursor: "pointer",
-            transition: "border-color 0.18s, color 0.18s",
           }}
         >Cancel</button>
 
@@ -394,7 +605,6 @@ export default function CharacterForm({ session, initialChar, onCreated, onUpdat
             boxShadow: saving || !newChar.name.trim() || !newChar.personality.trim()
               ? "none"
               : "0 4px 20px hsla(119,99%,46%,0.25)",
-            transition: "all 0.18s",
           }}
         >
           {saving ? "⏳ Saving…" : isEditing ? "✓ Save Changes" : "✦ Create & Chat"}
