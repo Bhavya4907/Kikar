@@ -138,13 +138,21 @@ npm install
 
 ### Configure environment variables
 
-Create a `.env.local` file.
+Create a `.env.local` file (or copy `.env.example`):
 
 ```env
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_key
-GOOGLE_API_KEY=your_gemini_api_key
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+
+# AI Providers
+GROQ_API_KEY=your_groq_api_key
+GEMINI_API_KEY=your_gemini_api_key
 ```
+
+### Database Setup
+
+Run the SQL script `supabase-schema.sql` in your [Supabase SQL Editor](https://supabase.com/dashboard/project/_/sql) to automatically set up tables, RLS policies, real-time channels, and storage bucket.
 
 ---
 

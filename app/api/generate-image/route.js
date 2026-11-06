@@ -1,11 +1,21 @@
 import { GoogleGenAI } from "@google/genai";
 
-// The SDK automatically looks for process.env.GEMINI_API_KEY if you leave the config empty
-const ai = new GoogleGenAI({});
-
 export async function POST(request) {
-  console.log("API KEY exists?", !!process.env.GEMINI_API_KEY);  
+  const apiKey = (process.env.GEMINI_API_KEY && !process.env.GEMINI_API_KEY.includes("your_"))
+    ? process.env.GEMINI_API_KEY
+    : (process.env.GOOGLE_API_KEY && !process.env.GOOGLE_API_KEY.includes("your_"))
+      ? process.env.GOOGLE_API_KEY
+      : "";
   
+  if (!apiKey) {
+    return Response.json(
+      { error: "Gemini API key is not configured. Please set GEMINI_API_KEY (or GOOGLE_API_KEY) in .env.local" },
+      { status: 500 }
+    );
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
+
   try {
     const { prompt } = await request.json();
 
@@ -13,28 +23,43 @@ export async function POST(request) {
       return Response.json({ error: "Prompt is required" }, { status: 400 });
     }
 
-    // Call the correct multimodal flash image model
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash-image", // or "gemini-2.5-flash-image"
-      contents: prompt,
-    });
+    const imageModels = [
+      "gemini-2.5-flash-image",
+      "gemini-3-pro-image",
+      "gemini-3.1-flash-image-preview",
+    ];
 
-    // Clean shortcut: check response.parts directly
-    if (response.parts) {
-      for (const part of response.parts) {
-        if (part.inlineData) {
-          const base64 = part.inlineData.data;
-          const mimeType = part.inlineData.mimeType || "image/png";
-          const url = `data:${mimeType};base64,${base64}`;
-          return Response.json({ url });
+    let lastError = null;
+
+    for (const model of imageModels) {
+      try {
+        const response = await ai.models.generateContent({
+          model,
+          contents: prompt,
+        });
+
+        if (response.parts) {
+          for (const part of response.parts) {
+            if (part.inlineData) {
+              const base64 = part.inlineData.data;
+              const mimeType = part.inlineData.mimeType || "image/png";
+              const url = `data:${mimeType};base64,${base64}`;
+              return Response.json({ url });
+            }
+          }
         }
+      } catch (err) {
+        lastError = err;
+        console.warn(`Image model ${model} failed, trying next:`, err?.message || err);
       }
     }
 
-    return Response.json({ error: "No image returned from model" }, { status: 500 });
-
+    return Response.json(
+      { error: lastError?.message || "No image returned from model" },
+      { status: 500 }
+    );
   } catch (error) {
-    console.error("Gemini error:", error.message);
-    return Response.json({ error: error.message }, { status: 500 });
+    console.error("Gemini image error:", error?.message || error);
+    return Response.json({ error: error?.message || "Failed to generate image" }, { status: 500 });
   }
 }
