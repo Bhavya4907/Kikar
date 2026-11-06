@@ -5,7 +5,7 @@ const config: CapacitorConfig = {
   appName: 'Kikar',
   webDir: 'out',
   server: {
-    url: 'https://chat-bot-k6kp.vercel.app/', // ← paste your Vercel URL here
+    url: 'https://kikar-git-main-bhavya4907s-projects.vercel.app/',
     cleartext: true
   }
 };
