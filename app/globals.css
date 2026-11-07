@@ -180,6 +180,18 @@ html, body {
   .cc-app.people-view.chat-open .cc-main {
     transform: translateX(0);
   }
+
+  /* When in Radar Mode (.radar-view), .cc-main is full screen on mobile */
+  .cc-app.radar-view .cc-sidebar {
+    display: none;
+  }
+  .cc-app.radar-view .cc-main {
+    position: relative;
+    inset: 0;
+    width: 100%;
+    height: 100dvh;
+    transform: translateX(0) !important;
+  }
 }
 
 /* ── Responsive Helper Classes for Mobile Phone Screens ───────────── */

@@ -11,7 +11,7 @@ interface Props {
   onOpenForm: () => void
   onEditChar?: (c: any) => void
   onDeleteCharacter?: (id: string) => void
-  setView: (v: "ai" | "people") => void
+  setView: (v: "ai" | "people" | "radar") => void
   onOpenProfile: () => void
   onSignOut: () => void
   planTier?: PlanTier
@@ -210,29 +210,52 @@ export default function AIGridView({
     <div style={{ ...S.aiGridWrap, height: "100dvh", overflow: "hidden" }}>
       {/* Mobile-Responsive Header */}
       <div className="cc-grid-header">
-        {/* Top Left: People Mode Switcher */}
-        <button
-          type="button"
-          onClick={() => setView("people")}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            padding: "8px 12px",
-            background: "rgba(168,85,247,0.12)",
-            border: "1px solid rgba(168,85,247,0.35)",
-            borderRadius: 10,
-            color: "#c084fc",
-            fontWeight: 600,
-            fontSize: 13,
-            cursor: "pointer",
-            fontFamily: T.font,
-            flexShrink: 0,
-          }}
-        >
-          <span>◉</span>
-          <span>People</span>
-        </button>
+        {/* Top Left: Mode Switchers */}
+        <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+          <button
+            type="button"
+            onClick={() => setView("people")}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "8px 12px",
+              background: "rgba(168,85,247,0.12)",
+              border: "1px solid rgba(168,85,247,0.35)",
+              borderRadius: 10,
+              color: "#c084fc",
+              fontWeight: 600,
+              fontSize: 13,
+              cursor: "pointer",
+              fontFamily: T.font,
+            }}
+          >
+            <span>◉</span>
+            <span>People</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setView("radar")}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 5,
+              padding: "8px 11px",
+              background: "rgba(56,189,248,0.12)",
+              border: "1px solid rgba(56,189,248,0.35)",
+              borderRadius: 10,
+              color: "#38bdf8",
+              fontWeight: 600,
+              fontSize: 13,
+              cursor: "pointer",
+              fontFamily: T.font,
+            }}
+          >
+            <span>⚡</span>
+            <span>Radar</span>
+          </button>
+        </div>
 
         {/* Center (or Full-Width Row 2 on Mobile): Search Bar */}
         <div className="cc-grid-search">

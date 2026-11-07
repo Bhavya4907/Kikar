@@ -9,6 +9,7 @@ interface Props {
   conversations: any[]
   onStartConversation: (userId: string) => void
   onOpenPricing?: () => void
+  onOpenRadar?: () => void
 }
 
 export default function PeopleDirectoryView({
@@ -16,6 +17,8 @@ export default function PeopleDirectoryView({
   allProfiles,
   conversations,
   onStartConversation,
+  onOpenPricing,
+  onOpenRadar,
 }: Props) {
   const [searchQuery, setSearchQuery] = useState("")
   const [filterTab, setFilterTab] = useState<"all" | "online" | "replica" | "chats">("online")
@@ -163,6 +166,31 @@ export default function PeopleDirectoryView({
             </button>
           )}
         </div>
+
+        {onOpenRadar && (
+          <button
+            type="button"
+            onClick={onOpenRadar}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "8px 14px",
+              background: "linear-gradient(135deg, rgba(56,189,248,0.18) 0%, rgba(14,165,233,0.1) 100%)",
+              border: "1px solid rgba(56,189,248,0.4)",
+              borderRadius: 10,
+              color: "#38bdf8",
+              fontWeight: 700,
+              fontSize: 12,
+              cursor: "pointer",
+              fontFamily: T.font,
+              flexShrink: 0,
+            }}
+          >
+            <span>⚡</span>
+            <span>Omegle Radar</span>
+          </button>
+        )}
       </div>
 
       {/* ── Filter Tabs ────────────────────────────────────────────── */}

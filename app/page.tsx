@@ -12,6 +12,7 @@ import ModeSelection from "../src/components/ModeSelection"
 import AIGridView from "../src/components/AIGridView"
 import PricingModal from "../src/components/PricingModal"
 import PeopleDirectoryView from "../src/components/PeopleDirectoryView"
+import RandomMatchWindow from "../src/components/RandomMatchWindow"
 import { T } from "../src/styles"
 import type { PlanTier, UsageQuota } from "../src/lib/types"
 
@@ -27,7 +28,7 @@ export default function Home() {
   const [allProfiles,   setAllProfiles]   = useState<any[]>([])
   const [searchEmail,   setSearchEmail]   = useState("")
   const [searchResult,  setSearchResult]  = useState<any>(null)
-  const [view,          setView]          = useState<"ai"|"people">("ai")
+  const [view,          setView]          = useState<"ai"|"people"|"radar">("ai")
   const [showForm,      setShowForm]      = useState(false)
   const [editingChar,   setEditingChar]   = useState<any>(null)
   const [showProfile,   setShowProfile]   = useState(false)
@@ -44,13 +45,13 @@ export default function Home() {
   // ── Mode Persistence ─────────────────────────────────────────
   useEffect(() => {
     const savedMode = localStorage.getItem("kikar_mode")
-    if (savedMode === "ai" || savedMode === "people") {
-      setView(savedMode as "ai"|"people")
+    if (savedMode === "ai" || savedMode === "people" || savedMode === "radar") {
+      setView(savedMode as "ai"|"people"|"radar")
       setInitialModeSelected(true)
     }
   }, [])
 
-  function handleSetView(m: "ai"|"people") {
+  function handleSetView(m: "ai"|"people"|"radar") {
     setView(m)
     localStorage.setItem("kikar_mode", m)
     // On mobile, switching views should return to the main list view of that mode
@@ -62,7 +63,7 @@ export default function Home() {
     setChatOpen(false)
   }
 
-  function selectMode(m: "ai"|"people") {
+  function selectMode(m: "ai"|"people"|"radar") {
     setView(m)
     setInitialModeSelected(true)
     setChatOpen(false)
@@ -471,7 +472,7 @@ export default function Home() {
     )
   }
 
-  const modeClass = view === "ai" ? "ai-view" : "people-view"
+  const modeClass = view === "ai" ? "ai-view" : view === "radar" ? "radar-view" : "people-view"
 
   return (
     <div className={`cc-app ${modeClass}${chatOpen ? " chat-open" : ""}`}>
@@ -522,7 +523,18 @@ export default function Home() {
       )}
 
       <main className="cc-main">
-        {view === "people" && activeConvo ? (
+        {view === "radar" ? (
+          <RandomMatchWindow
+            session={session}
+            profile={profile}
+            allProfiles={allProfiles}
+            characters={characters}
+            onBack={() => handleSetView("people")}
+            onStartPermanentConvo={startConversation}
+            onOpenChar={openChar}
+          />
+
+        ) : view === "people" && activeConvo ? (
           <DMWindow
             session={session}
             activeConvo={activeConvo}
@@ -544,6 +556,7 @@ export default function Home() {
             conversations={conversations}
             onStartConversation={startConversation}
             onOpenPricing={() => setShowPricing(true)}
+            onOpenRadar={() => handleSetView("radar")}
           />
 
         ) : showProfile ? (

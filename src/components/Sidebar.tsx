@@ -4,8 +4,8 @@ import { T } from "../styles"
 
 interface Props {
   session: any
-  view: "ai" | "people"
-  setView: (v: "ai" | "people") => void
+  view: "ai" | "people" | "radar"
+  setView: (v: "ai" | "people" | "radar") => void
   characters: any[]
   charsLoading: boolean
   activeChar: any
@@ -183,31 +183,54 @@ export default function Sidebar({
           onClick={() => setView("people")}
           style={{
             flex: 1,
-            padding: "8px 12px",
+            padding: "8px 10px",
             borderRadius: 8,
             border: "none",
             background: view === "people" ? "rgba(168,85,247,0.18)" : "transparent",
             color: view === "people" ? "#c084fc" : T.muted,
             fontWeight: 700,
-            fontSize: 12,
+            fontSize: 11,
             cursor: "pointer",
             fontFamily: T.font,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            gap: 6,
+            gap: 4,
           }}
         >
           <span>👥</span> Fellows
           {onlineProfiles.length > 0 && (
             <span style={{
-              width: 7,
-              height: 7,
+              width: 6,
+              height: 6,
               borderRadius: "50%",
               background: "#22c55e",
               boxShadow: "0 0 6px #22c55e",
             }} />
           )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setView("radar")}
+          style={{
+            flex: 1,
+            padding: "8px 10px",
+            borderRadius: 8,
+            border: "none",
+            background: view === "radar" ? "rgba(56,189,248,0.18)" : "transparent",
+            color: view === "radar" ? "#38bdf8" : T.muted,
+            fontWeight: 700,
+            fontSize: 11,
+            cursor: "pointer",
+            fontFamily: T.font,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 4,
+          }}
+        >
+          <span>⚡</span> Radar
         </button>
       </div>
 
@@ -331,7 +354,7 @@ export default function Sidebar({
           </div>
         </div>
 
-      ) : (
+      ) : view === "people" ? (
         /* ── People List (Zangi-Style Online Discovery & Search) ─── */
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
 
@@ -562,6 +585,61 @@ export default function Sidebar({
                 )
               })
             )}
+          </div>
+        </div>
+      ) : (
+        /* ── Radar Mode Sidebar ──────────────────────────────────── */
+        <div style={{
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          padding: 16,
+          gap: 16,
+          overflowY: "auto",
+        }}>
+          <div style={{
+            padding: 16,
+            background: "rgba(56,189,248,0.08)",
+            border: "1px solid rgba(56,189,248,0.25)",
+            borderRadius: 14,
+            textAlign: "center",
+          }}>
+            <div style={{ fontSize: 32, marginBottom: 6 }}>📡</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#38bdf8", marginBottom: 4 }}>
+              Kikar Radar Active
+            </div>
+            <div style={{ fontSize: 11, color: T.muted, lineHeight: 1.5 }}>
+              Instant anonymous 1-on-1 matches. Tap &apos;Start Matching&apos; in the main screen to begin!
+            </div>
+          </div>
+
+          <div style={{
+            background: T.surface,
+            border: `1px solid ${T.border}`,
+            borderRadius: 12,
+            padding: 14,
+          }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: T.muted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>
+              ⚡ Radar Features
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 12, color: T.text }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span>🎲</span>
+                <span>AI Wingman Icebreaker Host</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span>➔</span>
+                <span>Instant &apos;Next Stranger&apos; Skip</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span>🤝</span>
+                <span>Add Friend to Save Chat</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span>🪞</span>
+                <span>Replica Sparring Fallback</span>
+              </div>
+            </div>
           </div>
         </div>
       )}
