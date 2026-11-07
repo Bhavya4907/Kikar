@@ -2,7 +2,7 @@ import type React from "react"
 
 /* ────────────────────────────────────────────────────────────────────
    KIKAR AI — Design Tokens
-   Aligned with new dark charcoal + vivid green theme (globals.css)
+   Aligned with dark charcoal + vivid green theme (globals.css)
 ──────────────────────────────────────────────────────────────────── */
 
 export const T = {
@@ -18,6 +18,7 @@ export const T = {
   primaryFg:   "#0a0a0a",
   purple:      "#a855f7",
   purpleDim:   "rgba(168,85,247,0.15)",
+  amber:       "#f59e0b",
   text:        "#f0f0f0",
   muted:       "#888888",
   muted2:      "#555555",
@@ -680,6 +681,16 @@ export const S: Record<string, React.CSSProperties> = {
     cursor: "pointer",
     transition: "transform 0.2s, border-color 0.2s, box-shadow 0.2s",
   },
+  modeCardHoverAI: {
+    transform: "translateY(-4px)",
+    borderColor: "hsla(119, 99%, 46%, 0.45)",
+    boxShadow: "0 16px 40px hsla(119, 99%, 46%, 0.15)",
+  },
+  modeCardHoverPeople: {
+    transform: "translateY(-4px)",
+    borderColor: "rgba(168, 85, 247, 0.45)",
+    boxShadow: "0 16px 40px rgba(168, 85, 247, 0.15)",
+  },
   modeIconWrap: {
     width: 64,
     height: 64,
@@ -703,6 +714,8 @@ export const S: Record<string, React.CSSProperties> = {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
+    flexWrap: "wrap",
+    gap: 12,
   },
   aiGridTitle: {
     fontSize: 24,
@@ -729,6 +742,11 @@ export const S: Record<string, React.CSSProperties> = {
     flexDirection: "column",
     gap: 12,
     transition: "transform 0.15s, border-color 0.15s, background 0.15s",
+  },
+  botCardHover: {
+    transform: "translateY(-4px)",
+    borderColor: "hsla(119, 99%, 46%, 0.4)",
+    background: "#222222",
   },
   botAvatar: {
     width: 56,

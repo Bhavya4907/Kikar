@@ -49,19 +49,24 @@
 /* ── Base Reset ────────────────────────────────────────────────────── */
 *, *::before, *::after {
   box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
 }
 
 html, body {
   height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
   background: hsl(var(--hero-bg));
   color: hsl(var(--foreground));
   font-family: var(--font);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
 }
 
 /* ── Custom Scrollbars ─────────────────────────────────────────────── */
-::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--surface-alt); border-radius: var(--radius-pill); }
 ::-webkit-scrollbar-thumb:hover { background: var(--muted-2); }
@@ -97,14 +102,16 @@ html, body {
   to   { background-position:  200% center; }
 }
 
-/* ── App Layout ────────────────────────────────────────────────────── */
+/* ── App Layout (Desktop & Mobile Responsive) ─────────────────────── */
 .cc-app {
   display: flex;
+  width: 100%;
   height: 100dvh;
   background: var(--bg);
   color: var(--text);
   font-family: var(--font);
   overflow: hidden;
+  position: relative;
 }
 
 .cc-sidebar {
@@ -119,6 +126,7 @@ html, body {
 
 .cc-main {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -126,27 +134,143 @@ html, body {
   height: 100dvh;
 }
 
-/* ── Mobile Layout ─────────────────────────────────────────────────── */
+/* ── Mobile Layout (Fixes Blank Screen in AI View & Smooth Drawer in People View) ── */
 @media (max-width: 767px) {
-  .cc-app     { position: relative; overflow: hidden; }
-  .cc-sidebar { position: absolute; inset: 0; width: 100%; z-index: 10; transform: translateX(0); transition: transform 0.28s cubic-bezier(0.4,0,0.2,1); }
-  .cc-main    { position: absolute; inset: 0; width: 100%; z-index: 10; transform: translateX(100%); transition: transform 0.28s cubic-bezier(0.4,0,0.2,1); }
-  .cc-app.chat-open .cc-sidebar { transform: translateX(-100%); }
-  .cc-app.chat-open .cc-main    { transform: translateX(0); }
+  .cc-app {
+    position: relative;
+    overflow: hidden;
+    height: 100dvh;
+  }
+
+  /* When in AI Mode (.ai-view), there is no sidebar, so .cc-main must always stay on screen */
+  .cc-app.ai-view .cc-main {
+    position: relative;
+    inset: 0;
+    width: 100%;
+    height: 100dvh;
+    transform: translateX(0) !important;
+  }
+
+  /* When in People Mode (.people-view), toggle smoothly between Sidebar (People list) and Main (DM/Profile) */
+  .cc-app.people-view .cc-sidebar {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100dvh;
+    z-index: 10;
+    transform: translateX(0);
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .cc-app.people-view .cc-main {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100dvh;
+    z-index: 20;
+    transform: translateX(100%);
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .cc-app.people-view.chat-open .cc-sidebar {
+    transform: translateX(-100%);
+    pointer-events: none;
+  }
+
+  .cc-app.people-view.chat-open .cc-main {
+    transform: translateX(0);
+  }
+}
+
+/* ── Responsive Helper Classes for Mobile Phone Screens ───────────── */
+.cc-grid-header {
+  padding: 18px 28px;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: var(--surface);
+}
+
+.cc-grid-search {
+  flex: 1 1 220px;
+  max-width: 380px;
+}
+
+.cc-grid-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 28px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 20px;
+  align-content: start;
+}
+
+.cc-filter-tabs {
+  display: flex;
+  padding: 10px 28px 0;
+  gap: 6px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--surface);
+  flex-shrink: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.cc-filter-tabs::-webkit-scrollbar { display: none; }
+
+.cc-story-strip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 28px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border-color);
+  overflow-x: auto;
+  flex-shrink: 0;
+  scrollbar-width: none;
+}
+.cc-story-strip::-webkit-scrollbar { display: none; }
+
+@media (max-width: 767px) {
+  .cc-grid-header {
+    padding: 12px 14px;
+    gap: 10px;
+  }
+  .cc-grid-search {
+    order: 3;
+    flex: 1 1 100%;
+    max-width: 100%;
+    margin: 0 !important;
+  }
+  .cc-grid-container {
+    padding: 14px;
+    grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+    gap: 12px;
+  }
+  .cc-filter-tabs {
+    padding: 8px 12px 0;
+  }
+  .cc-story-strip {
+    padding: 10px 14px;
+  }
+  .hide-on-mobile {
+    display: none !important;
+  }
 }
 
 /* ── Message bubbles ───────────────────────────────────────────────── */
-.cc-bubble { max-width: 65%; }
-@media (max-width: 767px) { .cc-bubble { max-width: 82%; } }
+.cc-bubble { max-width: 100%; }
 
-.cc-messages { padding: 20px 8%; }
-@media (max-width: 767px) { .cc-messages { padding: 16px 4%; } }
+.cc-messages { padding: 18px 6%; }
+@media (max-width: 767px) { .cc-messages { padding: 12px 12px; } }
 
 .cc-chat-input { font-size: 15px; }
-@media (max-width: 767px) { .cc-chat-input { font-size: 16px; } }
+@media (max-width: 767px) { .cc-chat-input { font-size: 16px !important; } }
 
-.cc-back-btn { display: none; }
-@media (max-width: 767px) { .cc-back-btn { display: flex; } }
+.cc-back-btn { display: flex; }
 
 .cc-charlist { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
 

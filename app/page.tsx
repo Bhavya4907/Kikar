@@ -53,11 +53,19 @@ export default function Home() {
   function handleSetView(m: "ai"|"people") {
     setView(m)
     localStorage.setItem("kikar_mode", m)
+    // On mobile, switching views should return to the main list view of that mode
+    setActiveChar(null)
+    setActiveConvo(null)
+    setShowForm(false)
+    setEditingChar(null)
+    setShowProfile(false)
+    setChatOpen(false)
   }
 
   function selectMode(m: "ai"|"people") {
     setView(m)
     setInitialModeSelected(true)
+    setChatOpen(false)
     localStorage.setItem("kikar_mode", m)
   }
 
@@ -117,26 +125,39 @@ export default function Home() {
       .then(({ data }) => setMessages(data || []))
   }, [activeChar, session])
 
-  // ── Load conversations ────────────────────────────────────────
+  // ── Load conversations (with periodic sync for new incoming DMs) ──
   useEffect(() => {
     if (!session) return
-    supabase
-      .from("conversations")
-      .select("*")
-      .or(`user1_id.eq.${session.user.id},user2_id.eq.${session.user.id}`)
-      .order("created_at", { ascending: false })
-      .then(async ({ data }) => {
-        if (!data) return
-        const ids = [...new Set(data.flatMap(c => [c.user1_id, c.user2_id]))]
-        const { data: profiles } = await supabase.from("profiles").select("id,username,display_name,avatar_url,is_online").in("id", ids)
-        const profileMap = Object.fromEntries((profiles || []).map(p => [p.id, p]))
-        const enriched = data.map(c => ({
-          ...c,
-          user1: profileMap[c.user1_id] || null,
-          user2: profileMap[c.user2_id] || null,
-        }))
-        setConversations(enriched)
-      })
+
+    async function fetchConversations() {
+      const { data } = await supabase
+        .from("conversations")
+        .select("*")
+        .or(`user1_id.eq.${session.user.id},user2_id.eq.${session.user.id}`)
+        .order("created_at", { ascending: false })
+
+      if (!data) return
+      const ids = [...new Set(data.flatMap(c => [c.user1_id, c.user2_id]))]
+      if (ids.length === 0) {
+        setConversations([])
+        return
+      }
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id,username,display_name,avatar_url,is_online,last_seen")
+        .in("id", ids)
+      const profileMap = Object.fromEntries((profiles || []).map(p => [p.id, p]))
+      const enriched = data.map(c => ({
+        ...c,
+        user1: profileMap[c.user1_id] || null,
+        user2: profileMap[c.user2_id] || null,
+      }))
+      setConversations(enriched)
+    }
+
+    fetchConversations()
+    const interval = setInterval(fetchConversations, 5000)
+    return () => clearInterval(interval)
   }, [session])
 
   // ── Load profile & usage quotas (with auto-creation if missing) ──
@@ -181,7 +202,6 @@ export default function Home() {
           setProfile(created || newProfile)
         }
 
-        // Load or initialize usage quotas
         const { data: existingQuota } = await supabase
           .from("usage_quotas")
           .select("*")
@@ -262,7 +282,7 @@ export default function Home() {
       supabase.from("profiles")
         .update({ is_online: true, last_seen: new Date().toISOString() })
         .eq("id", session.user.id).then(() => {})
-    }, 30000)
+    }, 20000)
 
     return () => {
       window.removeEventListener("beforeunload", handleOffline)
@@ -271,17 +291,23 @@ export default function Home() {
     }
   }, [session])
 
-  // ── Load all profiles (Lazy when in "people" view) ────────────────
+  // ── Load all profiles (with live presence refresh) ────────────
   useEffect(() => {
     if (!session || view !== "people") {
-      setAllProfiles([])
       return
     }
 
-    supabase.from("profiles").select("*")
-      .neq("id", session.user.id)
-      .order("is_online", { ascending: false })
-      .then(({ data }) => setAllProfiles(data || []))
+    function fetchProfiles() {
+      supabase.from("profiles").select("*")
+        .neq("id", session.user.id)
+        .order("is_online", { ascending: false })
+        .then(({ data }) => {
+          if (data) setAllProfiles(data)
+        })
+    }
+
+    fetchProfiles()
+    const pollProfiles = setInterval(fetchProfiles, 5000)
 
     const ch = supabase
       .channel("profiles-online")
@@ -294,6 +320,7 @@ export default function Home() {
       .subscribe()
 
     return () => {
+      clearInterval(pollProfiles)
       supabase.removeChannel(ch)
     }
   }, [session, view])
@@ -324,7 +351,8 @@ export default function Home() {
     setShowProfile(false); setChatOpen(true)
   }
   function openConvo(c: any) {
-    handleSetView("people")
+    setView("people")
+    localStorage.setItem("kikar_mode", "people")
     setActiveConvo(c); setActiveChar(null); setShowForm(false); setEditingChar(null)
     setShowProfile(false); setChatOpen(true)
   }
@@ -342,6 +370,7 @@ export default function Home() {
     setActiveConvo(null)
     setShowForm(false)
     setEditingChar(null)
+    setShowProfile(false)
   }
 
   // ── Actions ───────────────────────────────────────────────────
@@ -362,7 +391,7 @@ export default function Home() {
 
     if (existing) {
       const ids = [existing.user1_id, existing.user2_id]
-      const { data: profiles } = await supabase.from("profiles").select("id,username,display_name,avatar_url,is_online").in("id", ids)
+      const { data: profiles } = await supabase.from("profiles").select("id,username,display_name,avatar_url,is_online,last_seen").in("id", ids)
       const profileMap = Object.fromEntries((profiles || []).map(p => [p.id, p]))
       openConvo({ ...existing, user1: profileMap[existing.user1_id], user2: profileMap[existing.user2_id] })
       return
@@ -376,7 +405,7 @@ export default function Home() {
 
     if (data) {
       const ids = [data.user1_id, data.user2_id]
-      const { data: profiles } = await supabase.from("profiles").select("id,username,display_name,avatar_url,is_online").in("id", ids)
+      const { data: profiles } = await supabase.from("profiles").select("id,username,display_name,avatar_url,is_online,last_seen").in("id", ids)
       const profileMap = Object.fromEntries((profiles || []).map(p => [p.id, p]))
       const enriched = { ...data, user1: profileMap[data.user1_id], user2: profileMap[data.user2_id] }
       setConversations(prev => [enriched, ...prev])
@@ -436,14 +465,16 @@ export default function Home() {
   // ── Main app ──────────────────────────────────────────────────
   if (!initialModeSelected) {
     return (
-      <div style={{ display: "flex", minHeight: "100dvh" }}>
+      <div style={{ display: "flex", minHeight: "100dvh", width: "100%" }}>
         <ModeSelection onSelect={selectMode} />
       </div>
     )
   }
 
+  const modeClass = view === "ai" ? "ai-view" : "people-view"
+
   return (
-    <div className={`cc-app${chatOpen ? " chat-open" : ""}`}>
+    <div className={`cc-app ${modeClass}${chatOpen ? " chat-open" : ""}`}>
 
       {showPricing && (
         <PricingModal
@@ -506,7 +537,7 @@ export default function Home() {
             }}
           />
 
-        ) : view === "people" && !activeConvo ? (
+        ) : view === "people" && !activeConvo && !showProfile ? (
           <div style={{
             flex: 1,
             display: "flex",
@@ -548,7 +579,7 @@ export default function Home() {
                     Connect with People &amp; Replicas
                   </div>
                   <p style={{ color: T.muted, fontSize: 13, textAlign: "center", lineHeight: 1.7, margin: 0 }}>
-                    Search for someone by username or select a direct message. When friends are offline, their Digital Replica can automatically reply!
+                    Search for someone by username or select a direct message to start chatting live.
                   </p>
                 </div>
               </div>

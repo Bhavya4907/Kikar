@@ -42,12 +42,13 @@ export default function ChatWindow({
   const [loading, setLoading] = useState(false)
   const [generatingImg, setGeneratingImg] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
-  const [hoveredMsgId, setHoveredMsgId] = useState<string | null>(null)
+  const [activeActionMsgId, setActiveActionMsgId] = useState<string | null>(null)
   const [speakingMsgId, setSpeakingMsgId] = useState<string | null>(null)
   const [recalledMemories, setRecalledMemories] = useState<string[]>([])
   const [showReportModal, setShowReportModal] = useState(false)
   const [reportReason, setReportReason] = useState("Inaccurate or inappropriate AI response")
   const [reportSubmitted, setReportSubmitted] = useState(false)
+  const [showMobileMenu, setShowMobileMenu] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -57,20 +58,26 @@ export default function ChatWindow({
   async function sendMessage() {
     if (!input.trim() || !activeChar || loading || !session) return
 
-    // Check daily chat quota before calling LLM
     if (onConsumeChatQuota && !onConsumeChatQuota()) {
       if (onOpenPricing) onOpenPricing()
       return
     }
 
-    const userMsg = { role: "user", content: input, character_id: activeChar.id, user_id: session.user.id }
-    setMessages((prev: any) => [...prev, { ...userMsg, id: `temp-${Date.now()}` }])
+    const tempId = `temp-${Date.now()}`
+    const userMsg = { role: "user", content: input.trim(), character_id: activeChar.id, user_id: session.user.id }
+    const history = [...messages, userMsg].map(m => ({ role: m.role, content: m.content }))
+
+    setMessages((prev: any) => [...prev, { ...userMsg, id: tempId }])
     setInput("")
     setLoading(true)
 
     try {
-      const { data: insertedUserMsg } = await supabase.from("messages").insert(userMsg).select().single()
-      const history = [...messages, userMsg].map(m => ({ role: m.role, content: m.content }))
+      // Save user message (non-fatal if DB insert fails so chat still responds)
+      const { data: insertedUserMsg } = await supabase
+        .from("messages")
+        .insert(userMsg)
+        .select()
+        .maybeSingle()
 
       const res = await fetch("/api/chat", {
         method: "POST",
@@ -91,17 +98,31 @@ export default function ChatWindow({
 
       const aiReply = data.reply || "Sorry, I couldn't generate a response."
       const aiMsg = { role: "assistant", content: aiReply, character_id: activeChar.id, user_id: session.user.id }
-      const { data: insertedAiMsg } = await supabase.from("messages").insert(aiMsg).select().single()
+      const { data: insertedAiMsg } = await supabase
+        .from("messages")
+        .insert(aiMsg)
+        .select()
+        .maybeSingle()
 
       setMessages((prev: any) => [
-        ...prev.filter((m: any) => !m.id?.startsWith("temp-")),
-        insertedUserMsg || userMsg,
-        insertedAiMsg || aiMsg,
+        ...prev.filter((m: any) => m.id !== tempId),
+        insertedUserMsg || { ...userMsg, id: `u-${Date.now()}` },
+        insertedAiMsg || { ...aiMsg, id: `a-${Date.now() + 1}` },
       ])
       showNotification(activeChar.name, aiReply)
     } catch (err) {
       console.error("sendMessage error:", err)
-      setMessages((prev: any) => prev.filter((m: any) => !m.id?.startsWith("temp-")))
+      setMessages((prev: any) => [
+        ...prev.filter((m: any) => m.id !== tempId),
+        { ...userMsg, id: `u-${Date.now()}` },
+        {
+          id: `err-${Date.now()}`,
+          role: "assistant",
+          content: "Network error while reaching AI service. Please check your connection or API keys.",
+          character_id: activeChar.id,
+          user_id: session.user.id,
+        },
+      ])
     } finally {
       setLoading(false)
     }
@@ -116,7 +137,7 @@ export default function ChatWindow({
     }
 
     setGeneratingImg(true)
-    const promptText = input
+    const promptText = input.trim()
     setInput("")
     try {
       const res = await fetch("/api/generate-image", {
@@ -128,7 +149,7 @@ export default function ChatWindow({
       const data = await res.json()
       if (data.url) {
         const msg = { role: "assistant", content: `[image]:${data.url}`, character_id: activeChar.id, user_id: session.user.id }
-        const { data: inserted } = await supabase.from("messages").insert(msg).select().single()
+        const { data: inserted } = await supabase.from("messages").insert(msg).select().maybeSingle()
         setMessages((prev: any) => [...prev, inserted || { ...msg, id: `img-${Date.now()}` }])
       }
     } catch (err) {
@@ -140,6 +161,7 @@ export default function ChatWindow({
   }
 
   async function handleStartNewChat() {
+    setShowMobileMenu(false)
     if (!activeChar || !session || messages.length === 0) return
     if (window.confirm(`Start a fresh new chat session with ${activeChar.name}? This will clear your chat history with this bot.`)) {
       await supabase.from("messages").delete()
@@ -151,12 +173,10 @@ export default function ChatWindow({
 
   async function handleDeleteMessage(msgId: string) {
     if (!msgId) return
-    if (msgId.startsWith("temp-")) {
-      setMessages((prev: any) => prev.filter((m: any) => m.id !== msgId))
-      return
-    }
-    await supabase.from("messages").delete().eq("id", msgId)
     setMessages((prev: any) => prev.filter((m: any) => m.id !== msgId))
+    if (!String(msgId).startsWith("temp-") && !String(msgId).startsWith("u-") && !String(msgId).startsWith("a-")) {
+      await supabase.from("messages").delete().eq("id", msgId)
+    }
   }
 
   function handleCopyMessage(content: string, id: string) {
@@ -192,6 +212,7 @@ export default function ChatWindow({
   }
 
   function handleDeleteBot() {
+    setShowMobileMenu(false)
     if (!activeChar) return
     if (window.confirm(`Are you sure you want to delete "${activeChar.name}"? This will delete the bot and its chat messages.`)) {
       if (onDeleteCharacter) {
@@ -202,6 +223,7 @@ export default function ChatWindow({
   }
 
   async function createReplica() {
+    setShowMobileMenu(false)
     if (!session) return
     setCreating(true)
     const { data: msgs } = await supabase
@@ -264,22 +286,24 @@ export default function ChatWindow({
       flex: 1,
       overflow: "hidden",
       height: "100%",
+      width: "100%",
       fontFamily: T.font,
+      position: "relative",
     }}>
-      {/* ── Header ─────────────────────────────────────────────── */}
+      {/* ── Mobile-Friendly Single-Row Header ──────────────────── */}
       <div style={{
         display: "flex",
         alignItems: "center",
-        gap: 12,
-        padding: "12px 16px",
+        gap: 10,
+        padding: "10px 12px",
         background: T.surface,
         borderBottom: `1px solid ${T.border}`,
         flexShrink: 0,
-        flexWrap: "wrap",
       }}>
         <button
-          className="cc-back-btn"
+          type="button"
           onClick={onBack}
+          title="Back to characters"
           style={{
             display: "flex",
             alignItems: "center",
@@ -289,71 +313,52 @@ export default function ChatWindow({
             color: T.text,
             fontSize: 16,
             cursor: "pointer",
-            width: 34,
-            height: 34,
-            borderRadius: 8,
+            width: 36,
+            height: 36,
+            borderRadius: 10,
             flexShrink: 0,
-            lineHeight: 1,
             fontFamily: T.font,
           }}
         >←</button>
 
         {/* Character avatar */}
         <div style={{
-          width: 42,
-          height: 42,
-          borderRadius: 12,
+          width: 38,
+          height: 38,
+          borderRadius: 10,
           background: "hsla(119,99%,46%,0.12)",
           border: "1px solid hsla(119,99%,46%,0.25)",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          fontSize: 22,
-          boxShadow: "0 0 16px hsla(119,99%,46%,0.15)",
+          fontSize: 20,
           flexShrink: 0,
         }}>{activeChar.emoji}</div>
 
-        <div style={{ flex: 1, minWidth: 140 }}>
-          <div style={{ fontSize: 15, fontWeight: 600, color: T.text, letterSpacing: "-0.02em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {activeChar.name}
           </div>
-          <div style={{ fontSize: 11, color: T.muted, marginTop: 2, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          <div style={{ fontSize: 11, color: T.muted, display: "flex", alignItems: "center", gap: 5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {isReplica ? (
-              <span style={{ color: "#a855f7", fontWeight: 600 }}>🪞 Digital Replica</span>
+              <span style={{ color: "#a855f7", fontWeight: 600 }}>🪞 Replica</span>
             ) : isOwner ? (
-              <span style={{ color: T.primary }}>✦ Your Custom Bot</span>
+              <span style={{ color: T.primary }}>✦ Custom Bot</span>
             ) : (
-              <span>✦ AI Character</span>
+              <span>✦ AI Persona</span>
             )}
             <span>·</span>
-            <span
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 4,
-                color: "#38bdf8",
-                background: "rgba(56,189,248,0.12)",
-                border: "1px solid rgba(56,189,248,0.25)",
-                padding: "1px 7px",
-                borderRadius: 999,
-                fontSize: 10,
-                fontWeight: 600,
-              }}
-              title="ChatSorter AI Memory: Recalls user-scoped context across conversations"
-            >
-              🧠 Memory Active
-            </span>
+            <span style={{ color: "#38bdf8", fontWeight: 600 }}>🧠 Memory</span>
           </div>
         </div>
 
-        {/* Header Action Buttons */}
-        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-          {/* Quota / Plan Pill */}
+        {/* Compact Header Controls */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
           {onOpenPricing && (
             <button
               type="button"
               onClick={onOpenPricing}
-              title="View plan and remaining daily AI credits"
+              title="View plan and remaining daily credits"
               style={{
                 background: planTier === "free" ? "rgba(255,255,255,0.05)" : "hsla(119,99%,46%,0.14)",
                 border: planTier === "free" ? `1px solid ${T.border}` : `1px solid ${T.primary}`,
@@ -362,124 +367,164 @@ export default function ChatWindow({
                 fontSize: 11,
                 fontWeight: 700,
                 cursor: "pointer",
-                padding: "6px 10px",
+                padding: "6px 9px",
                 fontFamily: T.font,
+                whiteSpace: "nowrap",
               }}
             >
-              ⚡ {planTier.toUpperCase()}{" "}
-              {quota ? `(${Math.max(0, quota.daily_chat_limit - quota.daily_chat_used)} left)` : ""}
+              ⚡ {planTier.toUpperCase()}
             </button>
           )}
 
-          {/* New Chat Button */}
           <button
             type="button"
-            onClick={handleStartNewChat}
-            title="Start new chat session"
-            disabled={messages.length === 0}
+            onClick={() => setShowMobileMenu(prev => !prev)}
+            title="Character options"
             style={{
-              background: "rgba(255,255,255,0.05)",
-              border: `1px solid ${T.border}`,
+              width: 34,
+              height: 34,
               borderRadius: 8,
-              color: messages.length === 0 ? T.muted2 : T.text,
-              fontSize: 12,
-              fontWeight: 600,
-              cursor: messages.length === 0 ? "default" : "pointer",
-              padding: "6px 10px",
-              opacity: messages.length === 0 ? 0.5 : 1,
-              fontFamily: T.font,
-            }}
-          >
-            ✨ Reset
-          </button>
-
-          {/* Edit Bot if user created */}
-          {isOwner && !isReplica && onEditChar && (
-            <button
-              type="button"
-              onClick={() => onEditChar(activeChar)}
-              title="Edit character settings"
-              style={{
-                background: "rgba(255,255,255,0.05)",
-                border: `1px solid ${T.border}`,
-                borderRadius: 8,
-                color: T.muted,
-                fontSize: 12,
-                cursor: "pointer",
-                padding: "6px 9px",
-              }}
-            >
-              ✏️
-            </button>
-          )}
-
-          {/* Delete Bot if user created */}
-          {(isOwner || isReplica) && (
-            <button
-              type="button"
-              onClick={handleDeleteBot}
-              title="Delete this bot"
-              style={{
-                background: "rgba(248,113,113,0.08)",
-                border: "1px solid rgba(248,113,113,0.2)",
-                borderRadius: 8,
-                color: T.red,
-                fontSize: 12,
-                cursor: "pointer",
-                padding: "6px 9px",
-              }}
-            >
-              🗑️
-            </button>
-          )}
-
-          {/* Safety Report Button (Google Play UGC Compliance) */}
-          <button
-            type="button"
-            onClick={() => setShowReportModal(true)}
-            title="Report unsafe or inappropriate AI behavior"
-            style={{
-              background: "rgba(255,255,255,0.05)",
-              border: `1px solid ${T.border}`,
-              borderRadius: 8,
-              color: T.muted,
-              fontSize: 12,
+              background: showMobileMenu ? "hsla(119,99%,46%,0.15)" : T.bgAlt,
+              border: `1px solid ${showMobileMenu ? T.primary : T.border}`,
+              color: T.text,
+              fontSize: 16,
               cursor: "pointer",
-              padding: "6px 9px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
             }}
           >
-            🚩
-          </button>
-
-          {/* Create Replica button */}
-          <button
-            disabled={creating}
-            onClick={createReplica}
-            title="Create a digital replica persona of yourself"
-            style={{
-              background: "transparent",
-              border: "1px solid rgba(168,85,247,0.4)",
-              borderRadius: 8,
-              color: "#a855f7",
-              fontSize: 12,
-              fontWeight: 600,
-              cursor: creating ? "not-allowed" : "pointer",
-              padding: "6px 10px",
-              flexShrink: 0,
-              opacity: creating ? 0.5 : 1,
-              fontFamily: T.font,
-            }}
-          >
-            {creating ? "⏳ Creating…" : "🪞 My Replica"}
+            ⋯
           </button>
         </div>
       </div>
 
+      {/* ── Dropdown Menu for Character Actions (Works cleanly on Mobile & Desktop) ── */}
+      {showMobileMenu && (
+        <div style={{
+          position: "absolute",
+          top: 56,
+          right: 12,
+          zIndex: 50,
+          background: T.surface,
+          border: `1px solid ${T.border}`,
+          borderRadius: 12,
+          padding: 6,
+          boxShadow: "0 12px 32px rgba(0,0,0,0.65)",
+          display: "flex",
+          flexDirection: "column",
+          gap: 4,
+          minWidth: 200,
+        }}>
+          <button
+            type="button"
+            onClick={handleStartNewChat}
+            disabled={messages.length === 0}
+            style={{
+              padding: "9px 12px",
+              background: "transparent",
+              border: "none",
+              borderRadius: 8,
+              color: T.text,
+              fontSize: 12,
+              fontWeight: 600,
+              textAlign: "left",
+              cursor: "pointer",
+              fontFamily: T.font,
+              opacity: messages.length === 0 ? 0.5 : 1,
+            }}
+          >
+            ✨ Start Fresh Chat
+          </button>
+
+          <button
+            type="button"
+            disabled={creating}
+            onClick={createReplica}
+            style={{
+              padding: "9px 12px",
+              background: "transparent",
+              border: "none",
+              borderRadius: 8,
+              color: "#c084fc",
+              fontSize: 12,
+              fontWeight: 600,
+              textAlign: "left",
+              cursor: "pointer",
+              fontFamily: T.font,
+            }}
+          >
+            🪞 {creating ? "Creating Replica…" : "Train My Digital Replica"}
+          </button>
+
+          {isOwner && !isReplica && onEditChar && (
+            <button
+              type="button"
+              onClick={() => { setShowMobileMenu(false); onEditChar(activeChar) }}
+              style={{
+                padding: "9px 12px",
+                background: "transparent",
+                border: "none",
+                borderRadius: 8,
+                color: T.text,
+                fontSize: 12,
+                fontWeight: 600,
+                textAlign: "left",
+                cursor: "pointer",
+                fontFamily: T.font,
+              }}
+            >
+              ✏️ Edit Character &amp; Vibe
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => { setShowMobileMenu(false); setShowReportModal(true) }}
+            style={{
+              padding: "9px 12px",
+              background: "transparent",
+              border: "none",
+              borderRadius: 8,
+              color: T.muted,
+              fontSize: 12,
+              fontWeight: 600,
+              textAlign: "left",
+              cursor: "pointer",
+              fontFamily: T.font,
+            }}
+          >
+            🚩 Report AI Character
+          </button>
+
+          {(isOwner || isReplica) && (
+            <button
+              type="button"
+              onClick={handleDeleteBot}
+              style={{
+                padding: "9px 12px",
+                background: "transparent",
+                border: "none",
+                borderRadius: 8,
+                color: T.red,
+                fontSize: 12,
+                fontWeight: 600,
+                textAlign: "left",
+                cursor: "pointer",
+                fontFamily: T.font,
+              }}
+            >
+              🗑️ Delete Character
+            </button>
+          )}
+        </div>
+      )}
+
       {/* ── Safety Report Modal ──────────────────────────────────── */}
       {showReportModal && (
         <div style={{
-          margin: "8px 16px 0",
-          padding: "12px 16px",
+          margin: "8px 12px 0",
+          padding: "10px 14px",
           background: T.surface,
           border: "1px solid rgba(248,113,113,0.35)",
           borderRadius: 12,
@@ -488,25 +533,27 @@ export default function ChatWindow({
           justifyContent: "space-between",
           gap: 10,
           flexWrap: "wrap",
+          flexShrink: 0,
         }}>
           {reportSubmitted ? (
             <span style={{ fontSize: 12, color: T.primary, fontWeight: 600 }}>
-              ✓ Thank you. Your safety report has been logged for moderation review.
+              ✓ Thank you. Your safety report has been logged for review.
             </span>
           ) : (
             <>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
-                <span style={{ fontSize: 12, fontWeight: 600, color: T.red }}>🚩 Report Character:</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 200 }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: T.red }}>🚩 Report:</span>
                 <select
                   value={reportReason}
                   onChange={e => setReportReason(e.target.value)}
                   style={{
+                    flex: 1,
                     background: T.bgAlt,
                     border: `1px solid ${T.border}`,
                     borderRadius: 8,
                     color: T.text,
                     fontSize: 12,
-                    padding: "5px 10px",
+                    padding: "5px 8px",
                     fontFamily: T.font,
                   }}
                 >
@@ -530,7 +577,7 @@ export default function ChatWindow({
                     cursor: "pointer",
                   }}
                 >
-                  Submit Report
+                  Submit
                 </button>
                 <button
                   type="button"
@@ -559,8 +606,8 @@ export default function ChatWindow({
           background: "rgba(56,189,248,0.08)",
           border: "1px solid rgba(56,189,248,0.22)",
           borderRadius: 8,
-          padding: "7px 12px",
-          margin: "8px 16px 0 16px",
+          padding: "6px 12px",
+          margin: "8px 12px 0",
           fontSize: 11,
           color: "#7dd3fc",
           display: "flex",
@@ -571,7 +618,7 @@ export default function ChatWindow({
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, overflow: "hidden" }}>
             <span>🧠</span>
-            <span style={{ fontWeight: 600, flexShrink: 0 }}>ChatSorter Memory:</span>
+            <span style={{ fontWeight: 600, flexShrink: 0 }}>Memory:</span>
             <span style={{ opacity: 0.9, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {recalledMemories[0]}
             </span>
@@ -588,7 +635,6 @@ export default function ChatWindow({
               padding: "0 4px",
               flexShrink: 0,
             }}
-            title="Dismiss memory notice"
           >×</button>
         </div>
       )}
@@ -601,8 +647,7 @@ export default function ChatWindow({
           overflowY: "auto",
           display: "flex",
           flexDirection: "column",
-          gap: 12,
-          padding: 16,
+          gap: 10,
           background: T.bgAlt,
         }}
       >
@@ -613,17 +658,17 @@ export default function ChatWindow({
             alignItems: "center",
             justifyContent: "center",
             flex: 1,
-            gap: 14,
+            gap: 12,
             color: T.muted,
             fontSize: 13,
             textAlign: "center",
-            lineHeight: 1.7,
-            padding: 32,
+            lineHeight: 1.6,
+            padding: 24,
           }}>
             <div style={{
-              fontSize: 40,
-              width: 72,
-              height: 72,
+              fontSize: 36,
+              width: 68,
+              height: 68,
               borderRadius: 20,
               background: "hsla(119,99%,46%,0.08)",
               display: "flex",
@@ -635,13 +680,13 @@ export default function ChatWindow({
               <div style={{ fontWeight: 700, color: T.text, marginBottom: 4, fontSize: 16 }}>
                 Chat with {activeChar.name}
               </div>
-              <p style={{ margin: 0, maxWidth: 360 }}>
+              <p style={{ margin: 0, maxWidth: 320 }}>
                 {activeChar.system_prompt
-                  ? activeChar.system_prompt.replace(/You are .*?\. /i, "").substring(0, 140) + "…"
+                  ? activeChar.system_prompt.replace(/You are .*?\. /i, "").substring(0, 120) + "…"
                   : "Say hello or ask anything — this chat is private and saved."}
               </p>
             </div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center", marginTop: 8 }}>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center", marginTop: 6 }}>
               {["👋 Hello!", "Tell me about yourself", "Give me your best advice"].map(preset => (
                 <button
                   key={preset}
@@ -668,20 +713,21 @@ export default function ChatWindow({
           const isImage = m.content?.startsWith("[image]:")
           const imageUrl = isImage ? m.content.replace("[image]:", "") : null
           const isUser = m.role === "user"
-          const msgId = m.id ?? `msg-${i}`
-          const isHovered = hoveredMsgId === msgId
+          const msgId = String(m.id ?? `msg-${i}`)
+          const showActions = activeActionMsgId === msgId || speakingMsgId === msgId
 
           return (
             <div
               key={msgId}
-              onMouseEnter={() => setHoveredMsgId(msgId)}
-              onMouseLeave={() => setHoveredMsgId(null)}
+              onClick={() => setActiveActionMsgId(prev => (prev === msgId ? null : msgId))}
+              onMouseEnter={() => setActiveActionMsgId(msgId)}
+              onMouseLeave={() => setActiveActionMsgId(null)}
               style={{
                 display: "flex",
                 flexDirection: isUser ? "row-reverse" : "row",
                 alignItems: "center",
-                gap: 8,
-                maxWidth: "80%",
+                gap: 6,
+                maxWidth: "85%",
                 alignSelf: isUser ? "flex-end" : "flex-start",
                 position: "relative",
               }}
@@ -692,7 +738,7 @@ export default function ChatWindow({
                 style={{
                   padding: isImage ? 4 : "10px 14px",
                   borderRadius: 14,
-                  lineHeight: 1.55,
+                  lineHeight: 1.5,
                   fontSize: 14,
                   wordBreak: "break-word",
                   borderBottomRightRadius: isUser ? 4 : 14,
@@ -704,89 +750,88 @@ export default function ChatWindow({
                     : T.surface,
                   color: isUser ? T.primaryFg : T.text,
                   border: isUser ? "none" : `1px solid ${T.border}`,
-                  boxShadow: isUser ? "0 2px 12px hsla(119,99%,46%,0.2)" : "none",
                   fontWeight: isUser ? 500 : 400,
-                  animation: "fade-in 0.2s ease both",
                 }}
               >
                 {isImage ? (
                   <img
                     src={imageUrl!}
                     alt="Generated output"
-                    style={{ width: "100%", maxWidth: 280, borderRadius: 10, display: "block" }}
+                    style={{ width: "100%", maxWidth: 250, borderRadius: 10, display: "block" }}
                   />
                 ) : (
                   m.content
                 )}
               </div>
 
-              {/* Message Action Toolbar on Hover (Voice Note TTS + Copy + Delete) */}
-              <div style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 4,
-                opacity: isHovered || speakingMsgId === msgId ? 1 : 0,
-                transition: "opacity 0.15s ease",
-                pointerEvents: isHovered || speakingMsgId === msgId ? "auto" : "none",
-              }}>
-                {!isImage && (
+              {/* Touch & Hover Action Toolbar */}
+              {showActions && (
+                <div
+                  onClick={e => e.stopPropagation()}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 4,
+                  }}
+                >
+                  {!isImage && (
+                    <button
+                      type="button"
+                      title="Listen to AI voice note"
+                      onClick={() => handleSpeakToggle(m.content, msgId)}
+                      style={{
+                        background: speakingMsgId === msgId ? "hsla(119,99%,46%,0.2)" : T.surface,
+                        border: `1px solid ${speakingMsgId === msgId ? T.primary : T.border}`,
+                        borderRadius: 6,
+                        color: speakingMsgId === msgId ? T.primary : T.muted,
+                        fontSize: 11,
+                        cursor: "pointer",
+                        padding: "4px 6px",
+                      }}
+                    >
+                      {speakingMsgId === msgId ? "⏹️" : "🔊"}
+                    </button>
+                  )}
+
                   <button
                     type="button"
-                    title={speakingMsgId === msgId ? "Stop voice playback" : "Listen to AI voice note"}
-                    onClick={() => handleSpeakToggle(m.content, msgId)}
+                    title="Copy text"
+                    onClick={() => handleCopyMessage(m.content, msgId)}
                     style={{
-                      background: speakingMsgId === msgId ? "hsla(119,99%,46%,0.2)" : "rgba(255,255,255,0.06)",
-                      border: `1px solid ${speakingMsgId === msgId ? T.primary : T.border}`,
+                      background: T.surface,
+                      border: `1px solid ${T.border}`,
                       borderRadius: 6,
-                      color: speakingMsgId === msgId ? T.primary : T.muted,
+                      color: copiedId === msgId ? T.primary : T.muted,
                       fontSize: 11,
                       cursor: "pointer",
-                      padding: "3px 6px",
+                      padding: "4px 6px",
                     }}
                   >
-                    {speakingMsgId === msgId ? "⏹️" : "🔊"}
+                    {copiedId === msgId ? "✓" : "📋"}
                   </button>
-                )}
 
-                <button
-                  type="button"
-                  title="Copy text"
-                  onClick={() => handleCopyMessage(m.content, msgId)}
-                  style={{
-                    background: "rgba(255,255,255,0.06)",
-                    border: `1px solid ${T.border}`,
-                    borderRadius: 6,
-                    color: copiedId === msgId ? T.primary : T.muted,
-                    fontSize: 11,
-                    cursor: "pointer",
-                    padding: "3px 6px",
-                  }}
-                >
-                  {copiedId === msgId ? "✓ Copied" : "📋"}
-                </button>
-
-                <button
-                  type="button"
-                  title="Delete message"
-                  onClick={() => handleDeleteMessage(m.id)}
-                  style={{
-                    background: "rgba(255,255,255,0.06)",
-                    border: `1px solid ${T.border}`,
-                    borderRadius: 6,
-                    color: T.muted2,
-                    fontSize: 11,
-                    cursor: "pointer",
-                    padding: "3px 6px",
-                  }}
-                >
-                  🗑️
-                </button>
-              </div>
+                  <button
+                    type="button"
+                    title="Delete message"
+                    onClick={() => handleDeleteMessage(m.id)}
+                    style={{
+                      background: T.surface,
+                      border: `1px solid ${T.border}`,
+                      borderRadius: 6,
+                      color: T.red,
+                      fontSize: 11,
+                      cursor: "pointer",
+                      padding: "4px 6px",
+                    }}
+                  >
+                    🗑️
+                  </button>
+                </div>
+              )}
             </div>
           )
         })}
 
-        {/* Typing indicator */}
         {loading && (
           <div className="cc-bubble" style={{
             padding: "12px 16px",
@@ -809,29 +854,29 @@ export default function ChatWindow({
         <div ref={bottomRef} style={{ height: 4 }} />
       </div>
 
-      {/* ── Input Bar ──────────────────────────────────────────── */}
+      {/* ── Mobile-Optimized Input Bar ─────────────────────────── */}
       <div style={{
         display: "flex",
-        gap: 8,
-        padding: "10px 14px",
+        gap: 6,
+        padding: "8px 10px",
         background: T.surface,
         borderTop: `1px solid ${T.border}`,
         flexShrink: 0,
-        paddingBottom: "max(10px,env(safe-area-inset-bottom))",
+        paddingBottom: "max(10px, env(safe-area-inset-bottom))",
         alignItems: "center",
       }}>
-        {/* Image generation button */}
         <button
+          type="button"
           onClick={handleGenerateImage}
           disabled={!input.trim() || generatingImg}
           title="Generate image with Gemini AI"
           style={{
-            width: 42,
-            height: 42,
+            width: 38,
+            height: 38,
             borderRadius: "50%",
             background: T.bgAlt,
             border: `1px solid ${T.border}`,
-            fontSize: 17,
+            fontSize: 16,
             cursor: !input.trim() || generatingImg ? "not-allowed" : "pointer",
             flexShrink: 0,
             display: "flex",
@@ -851,36 +896,37 @@ export default function ChatWindow({
           placeholder={`Message ${activeChar.name}…`}
           style={{
             flex: 1,
-            padding: "11px 16px",
+            minWidth: 0,
+            padding: "10px 14px",
             background: T.bgAlt,
             border: `1px solid ${T.border}`,
             borderRadius: 999,
             color: T.text,
             outline: "none",
-            fontSize: 14,
+            fontSize: 16,
             fontFamily: T.font,
           }}
         />
 
         <button
+          type="button"
           onClick={sendMessage}
           disabled={loading || !input.trim()}
           style={{
-            width: 42,
-            height: 42,
+            width: 38,
+            height: 38,
             borderRadius: "50%",
             background: loading || !input.trim()
               ? T.surface
               : "linear-gradient(135deg, hsl(119,99%,46%), hsl(119,99%,38%))",
             border: `1px solid ${loading || !input.trim() ? T.border : "transparent"}`,
-            fontSize: 17,
+            fontSize: 16,
             cursor: loading || !input.trim() ? "not-allowed" : "pointer",
             color: loading || !input.trim() ? T.muted : T.primaryFg,
             flexShrink: 0,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            boxShadow: loading || !input.trim() ? "none" : "0 2px 12px hsla(119,99%,46%,0.3)",
           }}
         >↑</button>
       </div>

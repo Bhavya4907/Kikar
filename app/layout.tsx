@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Sora } from "next/font/google";
 import "./globals.css";
 
@@ -13,6 +13,15 @@ export const metadata: Metadata = {
   description: "Create AI-powered characters and chat. Build digital replicas of real people from their messages.",
 };
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
+  themeColor: "#0d0d0d",
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -23,7 +32,7 @@ export default function RootLayout({
       lang="en"
       className={`${sora.variable} h-full`}
     >
-      <body className="min-h-full flex flex-col antialiased">{children}</body>
+      <body className="min-h-full flex flex-col antialiased overflow-x-hidden">{children}</body>
     </html>
   );
 }

@@ -1,8 +1,8 @@
 -- ==============================================================================
--- KIKAR AI (COMMERCIAL v2) - SUPABASE DATABASE SCHEMA, BILLING & RLS POLICIES
+-- KIKAR AI (COMMERCIAL v2 + LIVE CHAT & MOBILE FIX) - SUPABASE DATABASE SCHEMA
 -- ==============================================================================
 -- Run this script in the Supabase SQL Editor (https://supabase.com/dashboard/project/_/sql)
--- to initialize all required tables, commercialization quotas, triggers, and storage.
+-- to initialize all required tables, realtime replication, triggers, and storage.
 
 -- 1. PROFILES TABLE (Extended with Auto-Replica & Plan Metadata)
 create table if not exists public.profiles (
@@ -20,7 +20,6 @@ create table if not exists public.profiles (
   created_at timestamptz default now()
 );
 
--- Ensure columns exist if upgrading an existing database
 alter table public.profiles add column if not exists auto_replica_enabled boolean default true;
 alter table public.profiles add column if not exists replica_status_note text default '';
 alter table public.profiles add column if not exists plan_tier text default 'free';
@@ -75,6 +74,11 @@ create table if not exists public.direct_messages (
 
 alter table public.direct_messages add column if not exists is_replica_reply boolean default false;
 alter table public.direct_messages add column if not exists ai_persona_name text;
+
+-- Enable FULL replica identity so Supabase Realtime broadcasts INSERT/UPDATE/DELETE reliably
+alter table public.profiles replica identity full;
+alter table public.conversations replica identity full;
+alter table public.direct_messages replica identity full;
 
 -- 6. SUBSCRIPTIONS TABLE (Razorpay / Stripe / RevenueCat Entitlements)
 create table if not exists public.subscriptions (
@@ -143,8 +147,9 @@ create policy "Users can update their own profile"
   to authenticated
   using (auth.uid() = id);
 
--- Characters Policies (Allows reading public bots, own bots, or active user replicas for DM auto-reply)
+-- Characters Policies
 drop policy if exists "Users can view public bots or their own bots" on public.characters;
+drop policy if exists "Users can view public bots, own bots, or active replicas" on public.characters;
 create policy "Users can view public bots, own bots, or active replicas"
   on public.characters for select
   to authenticated
@@ -200,7 +205,7 @@ create policy "Users can create conversations they participate in"
   to authenticated
   with check (auth.uid() = user1_id or auth.uid() = user2_id);
 
--- Direct Messages Policies (Supports live user DMs + offline replica auto-replies within a conversation)
+-- Direct Messages Policies
 drop policy if exists "Users can view DMs in their conversations" on public.direct_messages;
 create policy "Users can view DMs in their conversations"
   on public.direct_messages for select
@@ -218,7 +223,6 @@ create policy "Users can send DMs in their conversations"
   on public.direct_messages for insert
   to authenticated
   with check (
-    (sender_id = auth.uid() or is_replica_reply = true) and
     exists (
       select 1 from public.conversations c
       where c.id = conversation_id
@@ -242,7 +246,13 @@ drop policy if exists "Senders can delete their own DMs" on public.direct_messag
 create policy "Senders can delete their own DMs"
   on public.direct_messages for delete
   to authenticated
-  using (sender_id = auth.uid());
+  using (
+    exists (
+      select 1 from public.conversations c
+      where c.id = conversation_id
+      and (c.user1_id = auth.uid() or c.user2_id = auth.uid())
+    )
+  );
 
 -- Subscriptions & Usage Quotas Policies
 drop policy if exists "Users can view their own subscription" on public.subscriptions;
@@ -331,8 +341,29 @@ create policy "Authenticated users can upload chat-images"
   with check (bucket_id = 'chat-images');
 
 -- ==============================================================================
--- REALTIME SUBSCRIPTIONS
+-- REALTIME SUBSCRIPTIONS (SAFE IDEMPOTENT ADDITION)
 -- ==============================================================================
 
-alter publication supabase_realtime add table public.profiles;
-alter publication supabase_realtime add table public.direct_messages;
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'profiles'
+  ) then
+    alter publication supabase_realtime add table public.profiles;
+  end if;
+
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'conversations'
+  ) then
+    alter publication supabase_realtime add table public.conversations;
+  end if;
+
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'direct_messages'
+  ) then
+    alter publication supabase_realtime add table public.direct_messages;
+  end if;
+end $$;

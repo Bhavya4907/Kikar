@@ -21,28 +21,62 @@ export default function DMWindow({
   const [directMessages, setDirectMessages] = useState<any[]>([])
   const [uploadingImage, setUploadingImage] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
-  const [hoveredMsgId, setHoveredMsgId] = useState<string | null>(null)
+  const [activeActionMsgId, setActiveActionMsgId] = useState<string | null>(null)
   const [speakingMsgId, setSpeakingMsgId] = useState<string | null>(null)
-  const [autoReplicaMode, setAutoReplicaMode] = useState(true)
+  const [autoReplicaMode, setAutoReplicaMode] = useState(false)
   const [replicaTyping, setReplicaTyping] = useState(false)
   const [catchUpSummary, setCatchUpSummary] = useState<string | null>(null)
   const [summarizingDigest, setSummarizingDigest] = useState(false)
+  const [showMobileMenu, setShowMobileMenu] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const channelRef = useRef<any>(null)
 
   const other = activeConvo.user1_id === session.user.id
     ? activeConvo.user2
     : activeConvo.user1
   const otherProfile = allProfiles.find((p: any) => p.id === other?.id) || other
 
-  useEffect(() => {
-    if (!activeConvo) return
-    setCatchUpSummary(null)
-    supabase.from("direct_messages").select("*")
-      .eq("conversation_id", activeConvo.id)
-      .order("created_at", { ascending: true })
-      .then(({ data }) => setDirectMessages(data || []))
+  // Helper to merge messages without duplicates
+  function mergeMessages(incoming: any[]) {
+    setDirectMessages(prev => {
+      const map = new Map<string, any>()
+      for (const m of prev) {
+        if (!String(m.id).startsWith("temp-")) {
+          map.set(String(m.id), m)
+        }
+      }
+      for (const m of incoming) {
+        if (m && m.id) {
+          map.set(String(m.id), m)
+        }
+      }
+      return Array.from(map.values()).sort(
+        (a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
+      )
+    })
+  }
 
+  // ── Triple-Redundant Live Chat Sync (Initial Fetch + Broadcast + Postgres Changes + 2.5s Polling) ──
+  useEffect(() => {
+    if (!activeConvo?.id) return
+    setCatchUpSummary(null)
+    setShowMobileMenu(false)
+
+    async function fetchMessages() {
+      const { data } = await supabase
+        .from("direct_messages")
+        .select("*")
+        .eq("conversation_id", activeConvo.id)
+        .order("created_at", { ascending: true })
+      if (data) {
+        mergeMessages(data)
+      }
+    }
+
+    fetchMessages()
+
+    // Mark unread messages as read
     supabase.from("direct_messages")
       .update({ read_at: new Date().toISOString() })
       .eq("conversation_id", activeConvo.id)
@@ -50,15 +84,30 @@ export default function DMWindow({
       .is("read_at", null)
       .then(() => {})
 
+    // 1. Realtime channel with BOTH Broadcast (peer-to-peer WebSocket, zero RLS latency) AND postgres_changes
     const ch = supabase
-      .channel(`convo-${activeConvo.id}`)
+      .channel(`convo-live-${activeConvo.id}`, {
+        config: { broadcast: { self: false } },
+      })
+      .on("broadcast", { event: "dm-insert" }, ({ payload }) => {
+        if (payload && payload.conversation_id === activeConvo.id) {
+          mergeMessages([payload])
+          if (payload.sender_id !== session.user.id) {
+            const name = otherProfile?.display_name || otherProfile?.username || "Someone"
+            const isImage = payload.content?.startsWith("[image]:")
+            showNotification(name, isImage ? "📷 Sent an image" : payload.content)
+          }
+        }
+      })
+      .on("broadcast", { event: "dm-delete" }, ({ payload }) => {
+        if (payload?.id) {
+          setDirectMessages(prev => prev.filter(m => m.id !== payload.id))
+        }
+      })
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "direct_messages" },
         (p) => {
-          if (p.new.conversation_id === activeConvo.id) {
-            setDirectMessages(prev => {
-              if (prev.some(m => m.id === p.new.id)) return prev
-              return [...prev, p.new]
-            })
+          if (p.new && p.new.conversation_id === activeConvo.id) {
+            mergeMessages([p.new])
             if (p.new.sender_id !== session.user.id) {
               const name = otherProfile?.display_name || otherProfile?.username || "Someone"
               const isImage = p.new.content?.startsWith("[image]:")
@@ -68,22 +117,28 @@ export default function DMWindow({
         })
       .on("postgres_changes", { event: "DELETE", schema: "public", table: "direct_messages" },
         (p) => {
-          setDirectMessages(prev => prev.filter(m => m.id !== p.old.id))
+          if (p.old?.id) {
+            setDirectMessages(prev => prev.filter(m => m.id !== p.old.id))
+          }
         })
       .subscribe()
 
-    return () => { supabase.removeChannel(ch) }
-  }, [activeConvo])
+    channelRef.current = ch
+
+    // 2. Automatic 2.5s polling fallback so live chat works even if Supabase Realtime replication is off
+    const pollInterval = setInterval(fetchMessages, 2500)
+
+    return () => {
+      clearInterval(pollInterval)
+      supabase.removeChannel(ch)
+      channelRef.current = null
+    }
+  }, [activeConvo?.id])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [directMessages, replicaTyping])
+  }, [directMessages.length, replicaTyping])
 
-  /**
-   * Triggers either:
-   * 1. Multiplayer @ai Co-Pilot response inside the DM thread if user typed `@ai ...`, OR
-   * 2. Automatic Offline Digital Replica reply when the recipient is offline (`!otherProfile?.is_online`).
-   */
   async function triggerSmartDMResponse(userMessageText: string, recentMessages: any[]) {
     const isAiSummon = /^@(ai|kikar)\b/i.test(userMessageText.trim())
     const isRecipientOffline = !otherProfile?.is_online && autoReplicaMode
@@ -100,7 +155,6 @@ export default function DMWindow({
         systemPrompt = `You are Kikar AI Co-Pilot, summoned inside a direct message conversation between two human friends (${session.user.email?.split("@")[0]} and ${otherName}). Be helpful, witty, concise (under 75 words), and directly answer or mediate their request.`
         personaBadge = "✦ Kikar AI Co-Pilot"
       } else {
-        // Look up the offline user's replica character
         const { data: replicaChar } = await supabase
           .from("characters")
           .select("*")
@@ -114,7 +168,6 @@ export default function DMWindow({
         if (replicaChar?.system_prompt) {
           systemPrompt = `${replicaChar.system_prompt}\nYou are replying as ${otherName}'s Digital Replica while ${otherName} is offline. Keep it natural and concise.`
         } else {
-          // Build an on-the-fly style prompt from the offline user's past messages in this thread
           const pastSamples = recentMessages
             .filter(m => m.sender_id === other.id && !m.content?.startsWith("[image]:"))
             .slice(-15)
@@ -152,14 +205,19 @@ export default function DMWindow({
           .from("direct_messages")
           .insert({
             conversation_id: activeConvo.id,
-            sender_id: isAiSummon ? session.user.id : other.id,
+            sender_id: session.user.id,
             content: taggedContent,
           })
           .select()
           .single()
 
         if (inserted) {
-          setDirectMessages(prev => (prev.some(m => m.id === inserted.id) ? prev : [...prev, inserted]))
+          mergeMessages([inserted])
+          channelRef.current?.send({
+            type: "broadcast",
+            event: "dm-insert",
+            payload: inserted,
+          })
         }
       }
     } catch (err) {
@@ -175,7 +233,19 @@ export default function DMWindow({
     setInput("")
     const historySnapshot = [...directMessages]
 
-    const { data: inserted } = await supabase
+    // 1. Instant Optimistic UI insertion so message appears immediately
+    const tempId = `temp-${Date.now()}`
+    const optimisticMsg = {
+      id: tempId,
+      conversation_id: activeConvo.id,
+      sender_id: session.user.id,
+      content: msgContent,
+      created_at: new Date().toISOString(),
+    }
+    setDirectMessages(prev => [...prev, optimisticMsg])
+
+    // 2. Persist to Supabase and broadcast over WebSocket
+    const { data: inserted, error } = await supabase
       .from("direct_messages")
       .insert({
         conversation_id: activeConvo.id,
@@ -185,19 +255,24 @@ export default function DMWindow({
       .select()
       .single()
 
-    if (inserted) {
-      setDirectMessages(prev => (prev.some(m => m.id === inserted.id) ? prev : [...prev, inserted]))
+    if (inserted && !error) {
+      setDirectMessages(prev =>
+        prev.map(m => (m.id === tempId ? inserted : m))
+      )
+      channelRef.current?.send({
+        type: "broadcast",
+        event: "dm-insert",
+        payload: inserted,
+      })
     }
 
     await triggerSmartDMResponse(msgContent, historySnapshot)
   }
 
-  /**
-   * Generates a 3-bullet "Morning Catch-Up Digest" summarizing recent DM & Replica activity.
-   */
   async function generateCatchUpDigest() {
     if (directMessages.length === 0 || summarizingDigest) return
     setSummarizingDigest(true)
+    setShowMobileMenu(false)
     try {
       const recentTranscript = directMessages
         .slice(-25)
@@ -214,10 +289,10 @@ export default function DMWindow({
           messages: [
             {
               role: "user",
-              content: `Summarize this recent conversation (including any AI Replica replies) into 3 short, actionable bullet points covering: (1) Main topics discussed, (2) Any questions or plans pending, and (3) Overall vibe.\n\nTranscript:\n${recentTranscript}`,
+              content: `Summarize this recent conversation into 3 short, actionable bullet points covering: (1) Main topics discussed, (2) Any questions or plans pending, and (3) Overall vibe.\n\nTranscript:\n${recentTranscript}`,
             },
           ],
-          systemPrompt: "You are a concise executive catch-up assistant. Output 3 brief bullet points only.",
+          systemPrompt: "You are a concise catch-up assistant. Output 3 brief bullet points only.",
           userId: session.user.id,
         }),
       })
@@ -242,11 +317,23 @@ export default function DMWindow({
       const { error } = await supabase.storage.from("chat-images").upload(fileName, file)
       if (error) throw error
       const { data: { publicUrl } } = supabase.storage.from("chat-images").getPublicUrl(fileName)
-      await supabase.from("direct_messages").insert({
-        conversation_id: activeConvo.id,
-        sender_id: session.user.id,
-        content: `[image]:${publicUrl}`,
-      })
+      const { data: inserted } = await supabase
+        .from("direct_messages")
+        .insert({
+          conversation_id: activeConvo.id,
+          sender_id: session.user.id,
+          content: `[image]:${publicUrl}`,
+        })
+        .select()
+        .single()
+      if (inserted) {
+        mergeMessages([inserted])
+        channelRef.current?.send({
+          type: "broadcast",
+          event: "dm-insert",
+          payload: inserted,
+        })
+      }
     } catch (err) {
       alert("Failed to upload image")
       console.error(err)
@@ -258,11 +345,19 @@ export default function DMWindow({
 
   async function handleDeleteMessage(id: string) {
     if (!id) return
-    await supabase.from("direct_messages").delete().eq("id", id)
     setDirectMessages(prev => prev.filter(m => m.id !== id))
+    if (!String(id).startsWith("temp-")) {
+      await supabase.from("direct_messages").delete().eq("id", id)
+      channelRef.current?.send({
+        type: "broadcast",
+        event: "dm-delete",
+        payload: { id },
+      })
+    }
   }
 
   async function handleClearHistory() {
+    setShowMobileMenu(false)
     if (directMessages.length === 0) return
     if (window.confirm("Clear all messages in this direct conversation?")) {
       await supabase.from("direct_messages").delete().eq("conversation_id", activeConvo.id)
@@ -292,6 +387,7 @@ export default function DMWindow({
   }
 
   async function createReplica() {
+    setShowMobileMenu(false)
     if (!session || !other) return
     setCreating(true)
     const { data: msgs } = await supabase
@@ -303,7 +399,7 @@ export default function DMWindow({
       .limit(200)
 
     if (!msgs || msgs.length < 5) {
-      alert(`${other.username} needs to send at least 5 messages first!`)
+      alert(`${other.username || "This user"} needs to send at least 5 messages first!`)
       setCreating(false)
       return
     }
@@ -350,22 +446,24 @@ export default function DMWindow({
       flex: 1,
       overflow: "hidden",
       height: "100%",
+      width: "100%",
       fontFamily: T.font,
+      position: "relative",
     }}>
-      {/* ── Header ─────────────────────────────────────────────── */}
+      {/* ── Mobile-First Single-Row Header ─────────────────────── */}
       <div style={{
         display: "flex",
         alignItems: "center",
-        gap: 12,
-        padding: "12px 16px",
+        gap: 10,
+        padding: "10px 12px",
         background: T.surface,
         borderBottom: `1px solid ${T.border}`,
         flexShrink: 0,
-        flexWrap: "wrap",
       }}>
         <button
-          className="cc-back-btn"
+          type="button"
           onClick={onBack}
+          title="Back to People list"
           style={{
             display: "flex",
             alignItems: "center",
@@ -375,154 +473,191 @@ export default function DMWindow({
             color: T.text,
             fontSize: 16,
             cursor: "pointer",
-            width: 34,
-            height: 34,
-            borderRadius: 8,
+            width: 36,
+            height: 36,
+            borderRadius: 10,
             flexShrink: 0,
-            lineHeight: 1,
             fontFamily: T.font,
           }}
         >←</button>
 
-        {/* Avatar with online dot */}
+        {/* Avatar with live status dot */}
         <div style={{ position: "relative", flexShrink: 0 }}>
           {otherProfile?.avatar_url
-            ? <img src={otherProfile.avatar_url} style={{ width: 42, height: 42, borderRadius: "50%", objectFit: "cover", border: `2px solid ${T.border}` }} />
+            ? <img src={otherProfile.avatar_url} style={{ width: 38, height: 38, borderRadius: "50%", objectFit: "cover", border: `2px solid ${T.border}` }} />
             : <div style={{
-                width: 42, height: 42, borderRadius: "50%",
+                width: 38, height: 38, borderRadius: "50%",
                 background: T.surface,
                 border: `1px solid ${T.border}`,
-                display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20,
+                display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18,
               }}>👤</div>
           }
           <div style={{
-            position: "absolute", bottom: 1, right: 1,
-            width: 11, height: 11, borderRadius: "50%",
+            position: "absolute", bottom: 0, right: 0,
+            width: 10, height: 10, borderRadius: "50%",
             background: otherProfile?.is_online ? "#22c55e" : "#a855f7",
             border: `2px solid ${T.surface}`,
-            boxShadow: otherProfile?.is_online ? "0 0 6px rgba(34,197,94,0.5)" : "0 0 6px rgba(168,85,247,0.5)",
           }} />
         </div>
 
-        <div style={{ flex: 1, minWidth: 140 }}>
-          <div style={{ fontSize: 15, fontWeight: 600, color: T.text, letterSpacing: "-0.02em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {other?.display_name || other?.username || "Direct Chat"}
           </div>
-          <div style={{ fontSize: 11, color: otherProfile?.is_online ? "#22c55e" : "#a855f7", marginTop: 2, display: "flex", alignItems: "center", gap: 6 }}>
-            <span>{otherProfile?.is_online ? "● Live Human Online" : "🪞 Offline · AI Replica Standby"}</span>
+          <div style={{ fontSize: 11, color: otherProfile?.is_online ? "#22c55e" : "#a855f7", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {otherProfile?.is_online
+              ? "● Live Chat Active"
+              : autoReplicaMode
+              ? "🪞 Replica Auto-Reply ON"
+              : "● Offline"}
           </div>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-          {/* Offline Replica Auto-Responder Toggle */}
-          {!otherProfile?.is_online && (
-            <button
-              type="button"
-              onClick={() => setAutoReplicaMode(!autoReplicaMode)}
-              title="Toggle automatic replies from this user's AI Replica while they are offline"
-              style={{
-                background: autoReplicaMode ? "rgba(168,85,247,0.15)" : "rgba(255,255,255,0.05)",
-                border: autoReplicaMode ? "1px solid rgba(168,85,247,0.45)" : `1px solid ${T.border}`,
-                borderRadius: 8,
-                color: autoReplicaMode ? "#c084fc" : T.muted,
-                fontSize: 11,
-                fontWeight: 600,
-                cursor: "pointer",
-                padding: "6px 10px",
-                fontFamily: T.font,
-              }}
-            >
-              {autoReplicaMode ? "🪞 Auto-Replica: ON" : "🪞 Auto-Replica: OFF"}
-            </button>
-          )}
-
-          {/* Morning Catch-Up Digest button */}
-          {directMessages.length >= 3 && (
-            <button
-              type="button"
-              onClick={generateCatchUpDigest}
-              disabled={summarizingDigest}
-              title="Generate a 3-bullet Catch-Up Digest of this conversation"
-              style={{
-                background: "hsla(119,99%,46%,0.1)",
-                border: "1px solid hsla(119,99%,46%,0.35)",
-                borderRadius: 8,
-                color: T.primary,
-                fontSize: 11,
-                fontWeight: 600,
-                cursor: summarizingDigest ? "wait" : "pointer",
-                padding: "6px 10px",
-                fontFamily: T.font,
-              }}
-            >
-              {summarizingDigest ? "⏳ Summarizing…" : "☀️ Catch-Up Digest"}
-            </button>
-          )}
-
-          {/* Clear history button */}
-          {directMessages.length > 0 && (
-            <button
-              type="button"
-              onClick={handleClearHistory}
-              title="Clear message history"
-              style={{
-                background: "rgba(255,255,255,0.05)",
-                border: `1px solid ${T.border}`,
-                borderRadius: 8,
-                color: T.muted,
-                fontSize: 12,
-                cursor: "pointer",
-                padding: "6px 9px",
-                fontFamily: T.font,
-              }}
-            >
-              🧹
-            </button>
-          )}
-
-          {/* Clone Replica button */}
+        {/* Compact Action Buttons */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
           <button
+            type="button"
             disabled={creating}
             onClick={createReplica}
-            title="Create a standalone replica bot based on this person's chat style"
             style={{
-              background: "transparent",
+              background: "rgba(168,85,247,0.12)",
               border: "1px solid rgba(168,85,247,0.4)",
               borderRadius: 8,
-              color: "#a855f7",
+              color: "#c084fc",
               fontSize: 11,
               fontWeight: 600,
               cursor: creating ? "not-allowed" : "pointer",
               padding: "6px 10px",
-              flexShrink: 0,
-              opacity: creating ? 0.5 : 1,
               fontFamily: T.font,
+              whiteSpace: "nowrap",
             }}
           >
-            {creating ? "⏳ Cloning…" : "🪞 Clone Bot"}
+            {creating ? "⏳…" : "🪞 Replica"}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowMobileMenu(prev => !prev)}
+            title="More options"
+            style={{
+              width: 34,
+              height: 34,
+              borderRadius: 8,
+              background: showMobileMenu ? "hsla(119,99%,46%,0.15)" : T.bgAlt,
+              border: `1px solid ${showMobileMenu ? T.primary : T.border}`,
+              color: T.text,
+              fontSize: 16,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            ⋯
           </button>
         </div>
       </div>
 
-      {/* ── Creative Feature: Morning Catch-Up Digest Banner ──────── */}
+      {/* ── Compact Dropdown Menu for Secondary DM Tools ─────────── */}
+      {showMobileMenu && (
+        <div style={{
+          position: "absolute",
+          top: 56,
+          right: 12,
+          zIndex: 50,
+          background: T.surface,
+          border: `1px solid ${T.border}`,
+          borderRadius: 12,
+          padding: 6,
+          boxShadow: "0 12px 32px rgba(0,0,0,0.65)",
+          display: "flex",
+          flexDirection: "column",
+          gap: 4,
+          minWidth: 210,
+        }}>
+          <button
+            type="button"
+            onClick={() => { setAutoReplicaMode(!autoReplicaMode); setShowMobileMenu(false) }}
+            style={{
+              padding: "9px 12px",
+              background: "transparent",
+              border: "none",
+              borderRadius: 8,
+              color: autoReplicaMode ? "#c084fc" : T.text,
+              fontSize: 12,
+              fontWeight: 600,
+              textAlign: "left",
+              cursor: "pointer",
+              fontFamily: T.font,
+            }}
+          >
+            🪞 {autoReplicaMode ? "Disable Offline Auto-Replica" : "Enable Offline Auto-Replica"}
+          </button>
+
+          <button
+            type="button"
+            onClick={generateCatchUpDigest}
+            disabled={directMessages.length < 2 || summarizingDigest}
+            style={{
+              padding: "9px 12px",
+              background: "transparent",
+              border: "none",
+              borderRadius: 8,
+              color: T.primary,
+              fontSize: 12,
+              fontWeight: 600,
+              textAlign: "left",
+              cursor: "pointer",
+              fontFamily: T.font,
+              opacity: directMessages.length < 2 ? 0.5 : 1,
+            }}
+          >
+            ☀️ {summarizingDigest ? "Summarizing…" : "Generate Catch-Up Digest"}
+          </button>
+
+          {directMessages.length > 0 && (
+            <button
+              type="button"
+              onClick={handleClearHistory}
+              style={{
+                padding: "9px 12px",
+                background: "transparent",
+                border: "none",
+                borderRadius: 8,
+                color: T.red,
+                fontSize: 12,
+                fontWeight: 600,
+                textAlign: "left",
+                cursor: "pointer",
+                fontFamily: T.font,
+              }}
+            >
+              🧹 Clear Chat History
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* ── Catch-Up Digest Banner ──────────────────────────────── */}
       {catchUpSummary && (
         <div style={{
-          margin: "10px 16px 0",
-          padding: "12px 16px",
+          margin: "8px 12px 0",
+          padding: "10px 14px",
           background: "rgba(168,85,247,0.1)",
           border: "1px solid rgba(168,85,247,0.35)",
           borderRadius: 12,
           fontSize: 12,
           color: T.text,
-          lineHeight: 1.55,
+          lineHeight: 1.5,
           display: "flex",
           justifyContent: "space-between",
           alignItems: "flex-start",
-          gap: 12,
+          gap: 10,
+          flexShrink: 0,
         }}>
           <div>
-            <div style={{ fontWeight: 700, color: "#c084fc", marginBottom: 4, display: "flex", alignItems: "center", gap: 6 }}>
-              <span>☀️</span> Conversation &amp; Offline Replica Catch-Up Digest
+            <div style={{ fontWeight: 700, color: "#c084fc", marginBottom: 3 }}>
+              ☀️ Catch-Up Digest
             </div>
             <div style={{ whiteSpace: "pre-line", color: "#e5e7eb" }}>{catchUpSummary}</div>
           </div>
@@ -541,7 +676,7 @@ export default function DMWindow({
         </div>
       )}
 
-      {/* ── Messages ───────────────────────────────────────────── */}
+      {/* ── Messages Area ──────────────────────────────────────── */}
       <div
         className="cc-messages"
         style={{
@@ -549,8 +684,7 @@ export default function DMWindow({
           overflowY: "auto",
           display: "flex",
           flexDirection: "column",
-          gap: 6,
-          padding: 16,
+          gap: 8,
           background: T.bgAlt,
         }}
       >
@@ -561,18 +695,18 @@ export default function DMWindow({
             alignItems: "center",
             justifyContent: "center",
             flex: 1,
-            gap: 12,
+            gap: 10,
             color: T.muted,
             fontSize: 13,
             textAlign: "center",
-            padding: 32,
+            padding: 24,
           }}>
-            <div style={{ fontSize: 36 }}>💬</div>
+            <div style={{ fontSize: 34 }}>💬</div>
             <div style={{ fontWeight: 600, color: T.text, fontSize: 15 }}>
-              Start a conversation with {other?.display_name || other?.username}
+              Chat with {other?.display_name || other?.username}
             </div>
-            <p style={{ margin: 0, maxWidth: 340, lineHeight: 1.6 }}>
-              Send a direct message below. If they are offline, their <strong>🪞 AI Replica</strong> can reply automatically—or type <code>@ai</code> to summon Kikar AI Co-Pilot into your chat!
+            <p style={{ margin: 0, maxWidth: 300, lineHeight: 1.5 }}>
+              Send a message below for live real-time chat, or tap <code>✦ @ai</code> to bring Kikar AI Co-Pilot into the conversation!
             </p>
           </div>
         )}
@@ -583,12 +717,12 @@ export default function DMWindow({
           const displayContent = replicaMatch ? replicaMatch[2] : m.content
 
           const isAiCoPilot = replicaBadge?.includes("Co-Pilot")
-          const isUser = m.sender_id === session.user.id && !isAiCoPilot
+          const isUser = m.sender_id === session.user.id && !isAiCoPilot && !replicaBadge
           const isImage = displayContent?.startsWith("[image]:")
           const imageUrl = isImage ? displayContent.replace("[image]:", "") : null
           const showDate = i === 0 || formatDate(m.created_at) !== formatDate(directMessages[i - 1].created_at)
-          const msgId = m.id ?? `dm-${i}`
-          const isHovered = hoveredMsgId === msgId
+          const msgId = String(m.id ?? `dm-${i}`)
+          const showActions = activeActionMsgId === msgId || speakingMsgId === msgId
 
           return (
             <div key={msgId}>
@@ -597,7 +731,7 @@ export default function DMWindow({
                   display: "flex",
                   alignItems: "center",
                   gap: 10,
-                  margin: "12px 0 8px",
+                  margin: "10px 0 6px",
                 }}>
                   <div style={{ flex: 1, height: 1, background: T.border }} />
                   <div style={{
@@ -606,7 +740,7 @@ export default function DMWindow({
                     fontWeight: 600,
                     letterSpacing: "0.06em",
                     textTransform: "uppercase",
-                    padding: "3px 10px",
+                    padding: "2px 10px",
                     background: T.surface,
                     borderRadius: 999,
                     border: `1px solid ${T.border}`,
@@ -616,13 +750,14 @@ export default function DMWindow({
               )}
 
               <div
-                onMouseEnter={() => setHoveredMsgId(msgId)}
-                onMouseLeave={() => setHoveredMsgId(null)}
+                onClick={() => setActiveActionMsgId(prev => (prev === msgId ? null : msgId))}
+                onMouseEnter={() => setActiveActionMsgId(msgId)}
+                onMouseLeave={() => setActiveActionMsgId(null)}
                 style={{
                   display: "flex",
                   flexDirection: isUser ? "row-reverse" : "row",
                   alignItems: "flex-end",
-                  gap: 8,
+                  gap: 6,
                   marginBottom: 4,
                 }}
               >
@@ -630,9 +765,8 @@ export default function DMWindow({
                   display: "flex",
                   flexDirection: "column",
                   alignItems: isUser ? "flex-end" : "flex-start",
-                  maxWidth: "72%",
+                  maxWidth: "80%",
                 }}>
-                  {/* AI Replica / Co-Pilot Transparency Badge */}
                   {replicaBadge && (
                     <div style={{
                       fontSize: 10,
@@ -653,7 +787,7 @@ export default function DMWindow({
                     style={{
                       padding: isImage ? 4 : "10px 14px",
                       borderRadius: 14,
-                      lineHeight: 1.55,
+                      lineHeight: 1.5,
                       fontSize: 14,
                       wordBreak: "break-word",
                       borderBottomRightRadius: isUser ? 4 : 14,
@@ -671,21 +805,19 @@ export default function DMWindow({
                         : replicaBadge
                         ? "1px solid rgba(168,85,247,0.35)"
                         : `1px solid ${T.border}`,
-                      boxShadow: isUser ? "0 2px 12px hsla(119,99%,46%,0.2)" : "none",
                       fontWeight: isUser ? 500 : 400,
-                      animation: "fade-in 0.2s ease both",
                     }}
                   >
                     {isImage
                       ? <img src={imageUrl!}
                           alt="Attachment"
-                          style={{ maxWidth: 240, maxHeight: 280, borderRadius: 10, display: "block", cursor: "pointer" }}
-                          onClick={() => window.open(imageUrl!, "_blank")} />
+                          style={{ maxWidth: 230, maxHeight: 260, borderRadius: 10, display: "block", cursor: "pointer" }}
+                          onClick={(e) => { e.stopPropagation(); window.open(imageUrl!, "_blank") }} />
                       : displayContent}
                   </div>
 
                   {/* Timestamp + read receipt */}
-                  <div style={{ display: "flex", gap: 4, alignItems: "center", marginTop: 3, padding: "0 2px" }}>
+                  <div style={{ display: "flex", gap: 4, alignItems: "center", marginTop: 2, padding: "0 2px" }}>
                     <span style={{ fontSize: 10, color: T.muted2 }}>
                       {m.created_at ? formatTime(m.created_at) : ""}
                     </span>
@@ -695,77 +827,79 @@ export default function DMWindow({
                         color: m.read_at ? T.primary : T.muted2,
                         fontWeight: 600,
                       }}>
-                        {m.read_at ? "✓✓" : "✓"}
+                        {String(m.id).startsWith("temp-") ? "⋯" : m.read_at ? "✓✓" : "✓"}
                       </span>
                     )}
                   </div>
                 </div>
 
-                {/* Message Hover Actions (Voice Note TTS + Copy + Delete) */}
-                <div style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 4,
-                  opacity: isHovered || speakingMsgId === msgId ? 1 : 0,
-                  transition: "opacity 0.15s ease",
-                  marginBottom: 16,
-                  pointerEvents: isHovered || speakingMsgId === msgId ? "auto" : "none",
-                }}>
-                  {!isImage && (
-                    <button
-                      type="button"
-                      title={speakingMsgId === msgId ? "Stop voice playback" : "Play message aloud"}
-                      onClick={() => handleSpeakToggle(displayContent, msgId)}
-                      style={{
-                        background: speakingMsgId === msgId ? "hsla(119,99%,46%,0.2)" : "rgba(255,255,255,0.06)",
-                        border: `1px solid ${speakingMsgId === msgId ? T.primary : T.border}`,
-                        borderRadius: 6,
-                        color: speakingMsgId === msgId ? T.primary : T.muted,
-                        fontSize: 11,
-                        cursor: "pointer",
-                        padding: "3px 6px",
-                      }}
-                    >
-                      {speakingMsgId === msgId ? "⏹️" : "🔊"}
-                    </button>
-                  )}
-
-                  <button
-                    type="button"
-                    title="Copy message"
-                    onClick={() => handleCopy(m.content, msgId)}
+                {/* Touch & Hover Action Buttons */}
+                {showActions && (
+                  <div
+                    onClick={e => e.stopPropagation()}
                     style={{
-                      background: "rgba(255,255,255,0.06)",
-                      border: `1px solid ${T.border}`,
-                      borderRadius: 6,
-                      color: copiedId === msgId ? T.primary : T.muted,
-                      fontSize: 11,
-                      cursor: "pointer",
-                      padding: "3px 6px",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 4,
+                      marginBottom: 16,
                     }}
                   >
-                    {copiedId === msgId ? "✓" : "📋"}
-                  </button>
+                    {!isImage && (
+                      <button
+                        type="button"
+                        title="Play audio"
+                        onClick={() => handleSpeakToggle(displayContent, msgId)}
+                        style={{
+                          background: speakingMsgId === msgId ? "hsla(119,99%,46%,0.2)" : T.surface,
+                          border: `1px solid ${speakingMsgId === msgId ? T.primary : T.border}`,
+                          borderRadius: 6,
+                          color: speakingMsgId === msgId ? T.primary : T.muted,
+                          fontSize: 11,
+                          cursor: "pointer",
+                          padding: "4px 6px",
+                        }}
+                      >
+                        {speakingMsgId === msgId ? "⏹️" : "🔊"}
+                      </button>
+                    )}
 
-                  {m.sender_id === session.user.id && (
                     <button
                       type="button"
-                      title="Delete message"
-                      onClick={() => handleDeleteMessage(m.id)}
+                      title="Copy message"
+                      onClick={() => handleCopy(m.content, msgId)}
                       style={{
-                        background: "rgba(255,255,255,0.06)",
+                        background: T.surface,
                         border: `1px solid ${T.border}`,
                         borderRadius: 6,
-                        color: T.muted2,
+                        color: copiedId === msgId ? T.primary : T.muted,
                         fontSize: 11,
                         cursor: "pointer",
-                        padding: "3px 6px",
+                        padding: "4px 6px",
                       }}
                     >
-                      🗑️
+                      {copiedId === msgId ? "✓" : "📋"}
                     </button>
-                  )}
-                </div>
+
+                    {m.sender_id === session.user.id && (
+                      <button
+                        type="button"
+                        title="Delete message"
+                        onClick={() => handleDeleteMessage(m.id)}
+                        style={{
+                          background: T.surface,
+                          border: `1px solid ${T.border}`,
+                          borderRadius: 6,
+                          color: T.red,
+                          fontSize: 11,
+                          cursor: "pointer",
+                          padding: "4px 6px",
+                        }}
+                      >
+                        🗑️
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           )
@@ -781,56 +915,55 @@ export default function DMWindow({
             borderRadius: 999,
             alignSelf: "flex-start",
           }}>
-            🪞 AI Persona is typing a reply…
+            🪞 AI is replying…
           </div>
         )}
 
         <div ref={bottomRef} style={{ height: 4 }} />
       </div>
 
-      {/* ── Input Bar ──────────────────────────────────────────── */}
+      {/* ── Mobile-Optimized Input Bar ─────────────────────────── */}
       <div style={{
         display: "flex",
-        gap: 8,
-        padding: "10px 14px",
+        gap: 6,
+        padding: "8px 10px",
         background: T.surface,
         borderTop: `1px solid ${T.border}`,
         flexShrink: 0,
-        paddingBottom: "max(10px,env(safe-area-inset-bottom))",
+        paddingBottom: "max(10px, env(safe-area-inset-bottom))",
         alignItems: "center",
       }}>
         <input type="file" accept="image/*" style={{ display: "none" }}
           ref={fileInputRef} onChange={handleImageUpload} />
 
         <button
+          type="button"
           onClick={() => fileInputRef.current?.click()}
           disabled={uploadingImage}
           title="Upload image"
           style={{
-            width: 42,
-            height: 42,
+            width: 38,
+            height: 38,
             borderRadius: "50%",
             background: T.bgAlt,
             border: `1px solid ${T.border}`,
-            fontSize: 17,
+            fontSize: 16,
             cursor: uploadingImage ? "not-allowed" : "pointer",
             flexShrink: 0,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            opacity: uploadingImage ? 0.5 : 1,
           }}
         >{uploadingImage ? "⏳" : "🖼️"}</button>
 
-        {/* Quick @ai Co-Pilot trigger chip */}
         <button
           type="button"
           onClick={() => {
             if (!input.startsWith("@ai ")) setInput(`@ai ${input}`)
           }}
-          title="Summon Kikar AI Co-Pilot into this DM conversation"
+          title="Summon Kikar AI Co-Pilot"
           style={{
-            padding: "0 11px",
+            padding: "0 9px",
             height: 36,
             borderRadius: 999,
             background: input.startsWith("@ai") ? "hsla(119,99%,46%,0.18)" : T.bgAlt,
@@ -843,7 +976,7 @@ export default function DMWindow({
             flexShrink: 0,
           }}
         >
-          ✦ @ai
+          @ai
         </button>
 
         <input
@@ -851,43 +984,40 @@ export default function DMWindow({
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={e => e.key === "Enter" && sendDirectMessage()}
-          placeholder={
-            !otherProfile?.is_online && autoReplicaMode
-              ? `Message ${other?.display_name || other?.username}'s AI Replica (or type @ai)…`
-              : "Type a message (or @ai to summon AI Co-Pilot)…"
-          }
+          placeholder="Message (or @ai)…"
           style={{
             flex: 1,
-            padding: "11px 16px",
+            minWidth: 0,
+            padding: "10px 14px",
             background: T.bgAlt,
             border: `1px solid ${T.border}`,
             borderRadius: 999,
             color: T.text,
             outline: "none",
-            fontSize: 14,
+            fontSize: 16,
             fontFamily: T.font,
           }}
         />
 
         <button
+          type="button"
           onClick={sendDirectMessage}
           disabled={!input.trim()}
           style={{
-            width: 42,
-            height: 42,
+            width: 38,
+            height: 38,
             borderRadius: "50%",
             background: !input.trim()
               ? T.surface
               : "linear-gradient(135deg, hsl(119,99%,46%), hsl(119,99%,38%))",
             border: `1px solid ${!input.trim() ? T.border : "transparent"}`,
-            fontSize: 17,
+            fontSize: 16,
             cursor: !input.trim() ? "not-allowed" : "pointer",
             color: !input.trim() ? T.muted : T.primaryFg,
             flexShrink: 0,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            boxShadow: !input.trim() ? "none" : "0 2px 12px hsla(119,99%,46%,0.3)",
           }}
         >↑</button>
       </div>
