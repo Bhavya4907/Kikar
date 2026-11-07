@@ -415,7 +415,7 @@ export default function RandomMatchWindow({
         display: "flex",
         justifyContent: "space-between",
         alignItems: "center",
-        padding: "12px 18px",
+        padding: "max(12px, env(safe-area-inset-top, 12px)) 16px 12px",
         background: T.surface,
         borderBottom: `1px solid ${T.border}`,
         flexShrink: 0,
@@ -545,7 +545,7 @@ export default function RandomMatchWindow({
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          padding: 24,
+          padding: "24px 16px calc(76px + env(safe-area-inset-bottom, 8px))",
           position: "relative",
           overflowY: "auto",
         }}>
@@ -807,7 +807,7 @@ export default function RandomMatchWindow({
           <div style={{
             display: "flex",
             gap: 6,
-            padding: "8px 10px",
+            padding: "8px 10px max(10px, env(safe-area-inset-bottom, 10px))",
             background: T.surface,
             borderTop: `1px solid ${T.border}`,
             flexShrink: 0,

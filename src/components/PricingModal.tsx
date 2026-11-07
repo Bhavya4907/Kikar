@@ -175,6 +175,7 @@ export default function PricingModal({
       onClick={onClose}
     >
       <div
+        className="cc-pricing-dialog"
         onClick={e => e.stopPropagation()}
         style={{
           background: T.surface,

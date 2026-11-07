@@ -73,7 +73,7 @@ export default function Sidebar({
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
-        padding: "14px 16px",
+        padding: "max(14px, env(safe-area-inset-top, 14px)) 16px 14px",
         background: T.surface,
         borderBottom: `1px solid ${T.border}`,
         flexShrink: 0,

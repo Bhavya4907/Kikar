@@ -43,7 +43,13 @@
   --radius-xl: 20px;
   --radius-pill: 999px;
   --transition: 0.18s cubic-bezier(0.4, 0, 0.2, 1);
-  --font: var(--font-sora), 'Sora', -apple-system, sans-serif;
+  --font: 'Sora', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+  /* Mobile Safe Area Inset Tokens (Punch-hole cameras, notches, gesture pill) */
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+  --sar: env(safe-area-inset-right, 0px);
 }
 
 /* ── Base Reset ────────────────────────────────────────────────────── */
@@ -57,12 +63,26 @@ html, body {
   width: 100%;
   margin: 0;
   padding: 0;
-  background: hsl(var(--hero-bg));
+  background: #0d0d0d;
   color: hsl(var(--foreground));
   font-family: var(--font);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
+  overscroll-behavior-y: none;
+  -webkit-touch-callout: none;
+}
+
+/* Touch Ergonomics: Prevent unwanted text selection on UI controls */
+button, nav, .cc-mobile-bottom-nav, .cc-tab, .cc-back-btn {
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+.cc-bubble, .cc-chat-input, input, textarea {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 /* ── Custom Scrollbars ─────────────────────────────────────────────── */
@@ -248,7 +268,7 @@ html, body {
 
 @media (max-width: 767px) {
   .cc-grid-header {
-    padding: 12px 14px;
+    padding: max(12px, calc(env(safe-area-inset-top) + 6px)) 14px 10px;
     gap: 10px;
   }
   .cc-grid-search {
@@ -258,8 +278,8 @@ html, body {
     margin: 0 !important;
   }
   .cc-grid-container {
-    padding: 14px;
-    grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+    padding: 14px 14px calc(78px + env(safe-area-inset-bottom, 8px));
+    grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
     gap: 12px;
   }
   .cc-filter-tabs {
@@ -268,7 +288,31 @@ html, body {
   .cc-story-strip {
     padding: 10px 14px;
   }
+  .cc-charlist {
+    padding-bottom: calc(78px + env(safe-area-inset-bottom, 8px));
+  }
+  .cc-sidebar {
+    padding-bottom: calc(72px + env(safe-area-inset-bottom, 8px));
+  }
+  .cc-pricing-dialog {
+    padding: 18px 14px !important;
+    max-height: 94dvh !important;
+    border-radius: 16px !important;
+  }
+  /* Prevent iOS Safari and Android WebView auto-zoom on input focus */
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+  .cc-mobile-bottom-nav {
+    display: flex !important;
+  }
   .hide-on-mobile {
+    display: none !important;
+  }
+}
+
+@media (min-width: 768px) {
+  .cc-mobile-bottom-nav {
     display: none !important;
   }
 }

@@ -13,6 +13,7 @@ import AIGridView from "../src/components/AIGridView"
 import PricingModal from "../src/components/PricingModal"
 import PeopleDirectoryView from "../src/components/PeopleDirectoryView"
 import RandomMatchWindow from "../src/components/RandomMatchWindow"
+import MobileBottomNav from "../src/components/MobileBottomNav"
 import { T } from "../src/styles"
 import type { PlanTier, UsageQuota } from "../src/lib/types"
 
@@ -625,6 +626,20 @@ export default function Home() {
           />
         )}
       </main>
+
+      <MobileBottomNav
+        view={view}
+        setView={handleSetView}
+        showProfile={showProfile}
+        onOpenProfile={() => { setShowProfile(true); setChatOpen(false) }}
+        onCloseProfile={() => { setShowProfile(false); goBack() }}
+        activeChar={activeChar}
+        activeConvo={activeConvo}
+        showForm={showForm}
+        onlineCount={(allProfiles || []).filter(p => p.is_online).length}
+        profile={profile}
+        planTier={planTier}
+      />
     </div>
   )
 }

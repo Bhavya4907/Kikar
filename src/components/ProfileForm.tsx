@@ -73,7 +73,7 @@ export default function ProfileForm({ session, profile, onSaved, onCancel }: Pro
     <div style={{
       flex: 1,
       overflowY: "auto",
-      padding: "24px 20px",
+      padding: "max(16px, env(safe-area-inset-top, 16px)) 16px calc(32px + env(safe-area-inset-bottom, 16px))",
       background: T.bgAlt,
       fontFamily: T.font,
     }}>

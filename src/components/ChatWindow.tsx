@@ -295,7 +295,7 @@ export default function ChatWindow({
         display: "flex",
         alignItems: "center",
         gap: 10,
-        padding: "10px 12px",
+        padding: "max(10px, env(safe-area-inset-top, 10px)) 12px 10px",
         background: T.surface,
         borderBottom: `1px solid ${T.border}`,
         flexShrink: 0,
