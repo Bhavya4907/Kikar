@@ -8,10 +8,10 @@ import ChatWindow from "../src/components/ChatWindow"
 import DMWindow from "../src/components/DMWIndow"
 import CharacterForm from "../src/components/CharacterForm"
 import ProfileForm from "../src/components/ProfileForm"
-import ElectricBorder from "../src/components/ElectricBorder"
 import ModeSelection from "../src/components/ModeSelection"
 import AIGridView from "../src/components/AIGridView"
 import PricingModal from "../src/components/PricingModal"
+import PeopleDirectoryView from "../src/components/PeopleDirectoryView"
 import { T } from "../src/styles"
 import type { PlanTier, UsageQuota } from "../src/lib/types"
 
@@ -538,53 +538,13 @@ export default function Home() {
           />
 
         ) : view === "people" && !activeConvo && !showProfile ? (
-          <div style={{
-            flex: 1,
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: 32,
-            background: T.bgAlt,
-            fontFamily: T.font,
-          }}>
-            <ElectricBorder
-              color="#a855f7"
-              speed={1}
-              chaos={0.12}
-              borderRadius={20}
-              style={{
-                background: "rgba(22, 22, 22, 0.9)",
-                backdropFilter: "blur(16px)",
-                padding: "36px 32px",
-                maxWidth: 360,
-                textAlign: "center",
-              }}
-            >
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}>
-                <div style={{
-                  width: 72,
-                  height: 72,
-                  borderRadius: 20,
-                  background: "rgba(168,85,247,0.12)",
-                  border: "1px solid rgba(168,85,247,0.3)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: 32,
-                  boxShadow: "0 0 32px rgba(168,85,247,0.18)",
-                }}>◉</div>
-                <div>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: T.text, marginBottom: 6, letterSpacing: "-0.02em" }}>
-                    Connect with People &amp; Replicas
-                  </div>
-                  <p style={{ color: T.muted, fontSize: 13, textAlign: "center", lineHeight: 1.7, margin: 0 }}>
-                    Search for someone by username or select a direct message to start chatting live.
-                  </p>
-                </div>
-              </div>
-            </ElectricBorder>
-          </div>
+          <PeopleDirectoryView
+            session={session}
+            allProfiles={allProfiles}
+            conversations={conversations}
+            onStartConversation={startConversation}
+            onOpenPricing={() => setShowPricing(true)}
+          />
 
         ) : showProfile ? (
           <ProfileForm
