@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Bhavya4907/Kikar/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License: MIT"></a>
+  <a href="https://github.com/Bhavya4907/Kikar/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-Proprietary-red.svg" alt="License: Proprietary"></a>
   <a href="https://nextjs.org"><img src="https://img.shields.io/badge/Next.js-16%20(Turbopack)-black.svg" alt="Next.js 16"></a>
   <a href="https://deepmind.google/technologies/gemini/"><img src="https://img.shields.io/badge/Google-Gemini%20AI-blue.svg" alt="Google Gemini"></a>
   <a href="https://chatsorter.com"><img src="https://img.shields.io/badge/ChatSorter-AI%20Memory-purple.svg" alt="ChatSorter Memory"></a>
@@ -267,4 +267,4 @@ Kikar uses **Capacitor 7** with **Microsoft OpenJDK 21 LTS**.
 
 ## 📄 License
 
-This project is licensed under the [MIT License](LICENSE).
+Copyright © 2026 Bhavya Sharma / Kikar AI. All rights reserved. Proprietary software. Unauthorized copying, distribution, or commercial exploitation is strictly prohibited. See [LICENSE](LICENSE) for details.
