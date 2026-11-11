@@ -354,3 +354,52 @@ button, nav, .cc-mobile-bottom-nav, .cc-tab, .cc-back-btn {
   animation: shimmer 1.5s linear infinite;
   border-radius: var(--radius-md);
 }
+
+/* ── Discord Layout Styling & Custom Scrollbars ────────────────────── */
+.cc-discord-root {
+  font-family: var(--font);
+}
+
+.cc-discord-server-rail::-webkit-scrollbar {
+  display: none;
+}
+
+.cc-discord-channel-list::-webkit-scrollbar,
+.cc-discord-messages-scroll::-webkit-scrollbar,
+.cc-discord-member-list::-webkit-scrollbar {
+  width: 6px;
+}
+.cc-discord-channel-list::-webkit-scrollbar-track,
+.cc-discord-messages-scroll::-webkit-scrollbar-track,
+.cc-discord-member-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+.cc-discord-channel-list::-webkit-scrollbar-thumb,
+.cc-discord-messages-scroll::-webkit-scrollbar-thumb,
+.cc-discord-member-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+}
+.cc-discord-channel-list::-webkit-scrollbar-thumb:hover,
+.cc-discord-messages-scroll::-webkit-scrollbar-thumb:hover,
+.cc-discord-member-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+@media (max-width: 767px) {
+  .cc-discord-server-rail {
+    width: 58px !important;
+  }
+  .cc-discord-channel-sidebar {
+    width: 180px !important;
+  }
+  .cc-discord-member-list {
+    position: absolute !important;
+    right: 0 !important;
+    top: 48px !important;
+    bottom: 0 !important;
+    z-index: 50 !important;
+    box-shadow: -8px 0 24px rgba(0, 0, 0, 0.75) !important;
+    background: #111214 !important;
+  }
+}

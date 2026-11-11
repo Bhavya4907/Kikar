@@ -14,6 +14,7 @@ import PricingModal from "../src/components/PricingModal"
 import PeopleDirectoryView from "../src/components/PeopleDirectoryView"
 import RandomMatchWindow from "../src/components/RandomMatchWindow"
 import MobileBottomNav from "../src/components/MobileBottomNav"
+import DiscordView from "../src/components/discord/DiscordView"
 import { T } from "../src/styles"
 import type { PlanTier, UsageQuota } from "../src/lib/types"
 
@@ -464,20 +465,8 @@ export default function Home() {
   // ── Auth guard ────────────────────────────────────────────────
   if (!session) return <AuthScreen />
 
-  // ── Main app ──────────────────────────────────────────────────
-  if (!initialModeSelected) {
-    return (
-      <div style={{ display: "flex", minHeight: "100dvh", width: "100%" }}>
-        <ModeSelection onSelect={selectMode} />
-      </div>
-    )
-  }
-
-  const modeClass = view === "ai" ? "ai-view" : view === "radar" ? "radar-view" : "people-view"
-
   return (
-    <div className={`cc-app ${modeClass}${chatOpen ? " chat-open" : ""}`}>
-
+    <div style={{ width: "100%", height: "100dvh", overflow: "hidden", background: "#1e1f22" }}>
       {showPricing && (
         <PricingModal
           session={session}
@@ -497,148 +486,53 @@ export default function Home() {
         />
       )}
 
-      {view !== "ai" && (
-        <Sidebar
-          session={session}
-          view={view}
-          setView={handleSetView}
-          characters={characters}
-          charsLoading={charsLoading}
-          activeChar={activeChar}
-          activeConvo={activeConvo}
-          conversations={conversations}
-          allProfiles={allProfiles}
-          showForm={showForm}
-          searchEmail={searchEmail}
-          setSearchEmail={setSearchEmail}
-          searchResult={searchResult}
-          onOpenChar={openChar}
-          onOpenConvo={openConvo}
-          onOpenForm={openForm}
-          onOpenProfile={() => { setShowProfile(true); setChatOpen(true) }}
-          onStartConversation={startConversation}
-          onSearchUser={searchUser}
-          onDeleteCharacter={deleteCharacter}
-          onSignOut={handleSignOut}
-        />
+      {showProfile && (
+        <div style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 1100,
+          background: "rgba(0,0,0,0.85)",
+          backdropFilter: "blur(6px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 16,
+        }}>
+          <div style={{ width: "100%", maxWidth: 640, maxHeight: "90dvh", display: "flex", overflow: "hidden", borderRadius: 16 }}>
+            <ProfileForm
+              session={session}
+              profile={profile}
+              onSaved={(updated) => {
+                setProfile(updated)
+                setShowProfile(false)
+              }}
+              onCancel={() => setShowProfile(false)}
+            />
+          </div>
+        </div>
       )}
 
-      <main className="cc-main">
-        {view === "radar" ? (
-          <RandomMatchWindow
-            session={session}
-            profile={profile}
-            allProfiles={allProfiles}
-            characters={characters}
-            onBack={() => handleSetView("people")}
-            onStartPermanentConvo={startConversation}
-            onOpenChar={openChar}
-          />
-
-        ) : view === "people" && activeConvo ? (
-          <DMWindow
-            session={session}
-            activeConvo={activeConvo}
-            allProfiles={allProfiles}
-            onBack={goBack}
-            creating={creating}
-            setCreating={setCreating}
-            onReplicaCreated={(char) => {
-              setCharacters(prev => [char, ...prev.filter(c => c.replica_of !== char.replica_of)])
-              setView("ai")
-              openChar(char)
-            }}
-          />
-
-        ) : view === "people" && !activeConvo && !showProfile ? (
-          <PeopleDirectoryView
-            session={session}
-            allProfiles={allProfiles}
-            conversations={conversations}
-            onStartConversation={startConversation}
-            onOpenPricing={() => setShowPricing(true)}
-            onOpenRadar={() => handleSetView("radar")}
-          />
-
-        ) : showProfile ? (
-          <ProfileForm
-            session={session}
-            profile={profile}
-            onSaved={(updated) => {
-              setProfile(updated)
-              setShowProfile(false)
-              goBack()
-            }}
-            onCancel={() => { setShowProfile(false); goBack() }}
-          />
-
-        ) : showForm ? (
-          <CharacterForm
-            session={session}
-            initialChar={editingChar}
-            onCreated={(char) => {
-              setCharacters(prev => [char, ...prev])
-              setEditingChar(null)
-              setShowForm(false)
-              openChar(char)
-              setMessages([])
-            }}
-            onUpdated={(updated) => {
-              setCharacters(prev => prev.map(c => c.id === updated.id ? updated : c))
-              setEditingChar(null)
-              setShowForm(false)
-              openChar(updated)
-            }}
-            onCancel={() => { setShowForm(false); setEditingChar(null); goBack() }}
-          />
-
-        ) : !activeChar ? (
-          <AIGridView
-            characters={characters}
-            charsLoading={charsLoading}
-            session={session}
-            onOpenChar={openChar}
-            onOpenForm={openForm}
-            onEditChar={openEditForm}
-            onDeleteCharacter={deleteCharacter}
-            setView={handleSetView}
-            onOpenProfile={() => { setShowProfile(true); setChatOpen(true) }}
-            onSignOut={handleSignOut}
-            planTier={planTier}
-            onOpenPricing={() => setShowPricing(true)}
-          />
-        ) : (
-          <ChatWindow
-            session={session}
-            activeChar={activeChar}
-            messages={messages}
-            setMessages={setMessages}
-            onBack={goBack}
-            creating={creating}
-            setCreating={setCreating}
-            onDeleteCharacter={deleteCharacter}
-            onEditChar={openEditForm}
-            planTier={planTier}
-            quota={quota}
-            onConsumeChatQuota={consumeChatQuota}
-            onConsumeImageQuota={consumeImageQuota}
-            onOpenPricing={() => setShowPricing(true)}
-          />
-        )}
-      </main>
-
-      <MobileBottomNav
-        view={view}
-        setView={handleSetView}
-        showProfile={showProfile}
-        onOpenProfile={() => { setShowProfile(true); setChatOpen(false) }}
-        onCloseProfile={() => { setShowProfile(false); goBack() }}
-        activeChar={activeChar}
-        activeConvo={activeConvo}
-        showForm={showForm}
-        onlineCount={(allProfiles || []).filter(p => p.is_online).length}
+      <DiscordView
+        session={session}
         profile={profile}
+        allProfiles={allProfiles}
+        characters={characters}
+        charsLoading={charsLoading}
+        conversations={conversations}
+        activeConvo={activeConvo}
+        onOpenConvo={openConvo}
+        activeChar={activeChar}
+        onOpenChar={openChar}
+        onCloseActive={goBack}
+        onStartConversation={startConversation}
+        onOpenProfile={() => setShowProfile(true)}
+        onSignOut={handleSignOut}
         planTier={planTier}
+        quota={quota}
+        onOpenPricing={() => setShowPricing(true)}
+        onDeleteCharacter={deleteCharacter}
+        creating={creating}
+        setCreating={setCreating}
       />
     </div>
   )
