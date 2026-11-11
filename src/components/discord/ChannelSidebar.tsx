@@ -19,6 +19,8 @@ interface Props {
   onOpenPricing?: () => void
   onCreateChannel?: (serverId: string) => void
   onOpenCreateDM?: () => void
+  voiceConnected?: boolean
+  onToggleVoice?: () => void
 }
 
 export default function ChannelSidebar({
@@ -37,6 +39,8 @@ export default function ChannelSidebar({
   onOpenPricing,
   onCreateChannel,
   onOpenCreateDM,
+  voiceConnected = false,
+  onToggleVoice,
 }: Props) {
   const [micMuted, setMicMuted] = useState(false)
   const [headphonesMuted, setHeadphonesMuted] = useState(false)
@@ -313,6 +317,83 @@ export default function ChannelSidebar({
                   </button>
                 )
               })}
+
+            {/* Category: Voice Lounges */}
+            {activeServer.channels.some((c) => c.type === "voice") && (
+              <>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "16px 6px 4px",
+                    color: "#949ba4",
+                    fontSize: 11,
+                    fontWeight: 700,
+                    letterSpacing: "0.06em",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  <span>🔊 Voice Lounges</span>
+                </div>
+
+                {activeServer.channels
+                  .filter((c) => c.type === "voice")
+                  .map((channel) => {
+                    const isActive = activeChannelId === channel.id
+                    return (
+                      <button
+                        key={channel.id}
+                        type="button"
+                        onClick={() => {
+                          onSelectChannel(channel.id)
+                          if (!voiceConnected && onToggleVoice) {
+                            onToggleVoice()
+                          }
+                        }}
+                        style={{
+                          width: "100%",
+                          padding: "6px 8px",
+                          borderRadius: 6,
+                          border: "none",
+                          background: isActive
+                            ? "rgba(34, 197, 94, 0.15)"
+                            : "transparent",
+                          color: isActive ? "#22c55e" : "#949ba4",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          fontSize: 14,
+                          fontWeight: isActive ? 600 : 500,
+                          cursor: "pointer",
+                          textAlign: "left",
+                          transition: "all 0.15s ease",
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!isActive) {
+                            e.currentTarget.style.background = "rgba(255, 255, 255, 0.05)"
+                            e.currentTarget.style.color = "#dbdee1"
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!isActive) {
+                            e.currentTarget.style.background = "transparent"
+                            e.currentTarget.style.color = "#949ba4"
+                          }
+                        }}
+                      >
+                        <span style={{ fontSize: 15 }}>🔊</span>
+                        <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {channel.name}
+                        </span>
+                        {voiceConnected && isActive && (
+                          <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 6px #22c55e" }} />
+                        )}
+                      </button>
+                    )
+                  })}
+              </>
+            )}
 
             {/* Category: AI & Bot Arenas */}
             <div
@@ -603,6 +684,56 @@ export default function ChannelSidebar({
           </>
         )}
       </div>
+
+      {/* ── Discord Live Voice Status Bar (When in voice) ───────── */}
+      {voiceConnected && (
+        <div
+          style={{
+            padding: "8px 12px",
+            background: "rgba(34, 197, 94, 0.12)",
+            borderTop: "1px solid rgba(34, 197, 94, 0.25)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexShrink: 0,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+            <span style={{ fontSize: 16 }}>📶</span>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#22c55e", lineHeight: 1.2 }}>
+                Voice Connected
+              </div>
+              <div style={{ fontSize: 10, color: "#949ba4", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                RTC / 24ms
+              </div>
+            </div>
+          </div>
+
+          {onToggleVoice && (
+            <button
+              type="button"
+              onClick={onToggleVoice}
+              title="Disconnect from Voice"
+              style={{
+                width: 28,
+                height: 28,
+                borderRadius: "50%",
+                background: "rgba(248, 113, 113, 0.15)",
+                border: "1px solid rgba(248, 113, 113, 0.3)",
+                color: "#f87171",
+                fontSize: 12,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              📞
+            </button>
+          )}
+        </div>
+      )}
 
       {/* ── 3. Discord Bottom User Panel (Profile / Audio Controls) ── */}
       <div

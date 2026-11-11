@@ -1,7 +1,7 @@
 "use client"
 import { useState, useRef, useEffect } from "react"
 import { T } from "../../styles"
-import type { DiscordChannel, DiscordMessage, DiscordMember } from "../../lib/discordTypes"
+import type { DiscordChannel, DiscordMessage } from "../../lib/discordTypes"
 
 interface Props {
   channel: DiscordChannel
@@ -15,7 +15,14 @@ interface Props {
   onTriggerAiIcebreaker?: () => void
   generatingImg?: boolean
   onGenerateImage?: (prompt: string) => void
+  typingNames?: string[]
+  onTyping?: (isTyping: boolean) => void
+  onReactMessage?: (msgId: string, emoji: string) => void
+  voiceConnected?: boolean
+  onToggleVoice?: () => void
 }
+
+const QUICK_EMOJIS = ["👍", "❤️", "🔥", "😂", "💀", "🚀"]
 
 export default function ServerChatArea({
   channel,
@@ -29,6 +36,11 @@ export default function ServerChatArea({
   onTriggerAiIcebreaker,
   generatingImg = false,
   onGenerateImage,
+  typingNames = [],
+  onTyping,
+  onReactMessage,
+  voiceConnected = false,
+  onToggleVoice,
 }: Props) {
   const [input, setInput] = useState("")
   const [hoveredMsgId, setHoveredMsgId] = useState<string | null>(null)
@@ -37,15 +49,29 @@ export default function ServerChatArea({
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const typingTimeoutRef = useRef<any>(null)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages])
+  }, [messages, typingNames])
+
+  function handleInputChange(e: React.ChangeEvent<HTMLInputElement>) {
+    setInput(e.target.value)
+
+    if (onTyping) {
+      onTyping(true)
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+      typingTimeoutRef.current = setTimeout(() => {
+        onTyping(false)
+      }, 2000)
+    }
+  }
 
   function handleSend() {
     if (!input.trim()) return
     onSendMessage(input.trim())
     setInput("")
+    if (onTyping) onTyping(false)
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -139,6 +165,31 @@ export default function ServerChatArea({
 
         {/* Right header tool buttons */}
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {/* Voice Lounge Toggle Button */}
+          {onToggleVoice && (
+            <button
+              type="button"
+              onClick={onToggleVoice}
+              title={voiceConnected ? "Disconnect from Voice Lounge" : "Connect to Voice Lounge"}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 5,
+                padding: "4px 10px",
+                borderRadius: 6,
+                background: voiceConnected ? "rgba(34, 197, 94, 0.2)" : "rgba(255, 255, 255, 0.06)",
+                border: voiceConnected ? "1px solid #22c55e" : "1px solid rgba(255, 255, 255, 0.12)",
+                color: voiceConnected ? "#22c55e" : "#b5bac1",
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              <span>{voiceConnected ? "🔊" : "🔈"}</span>
+              <span className="hide-on-mobile">{voiceConnected ? "Connected" : "Join Voice"}</span>
+            </button>
+          )}
+
           {onTriggerAiIcebreaker && (
             <button
               type="button"
@@ -186,6 +237,44 @@ export default function ServerChatArea({
         </div>
       </header>
 
+      {/* ── Voice Banner (If Connected) ───────────────────────────── */}
+      {voiceConnected && (
+        <div
+          style={{
+            padding: "8px 16px",
+            background: "rgba(34, 197, 94, 0.1)",
+            borderBottom: "1px solid rgba(34, 197, 94, 0.25)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            fontSize: 12,
+            color: "#22c55e",
+            fontWeight: 600,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 8px #22c55e" }} />
+            <span>Voice Connected / RTC Latency: 24ms</span>
+          </div>
+          {onToggleVoice && (
+            <button
+              type="button"
+              onClick={onToggleVoice}
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "#f87171",
+                cursor: "pointer",
+                fontWeight: 700,
+                fontSize: 11,
+              }}
+            >
+              Disconnect 🔴
+            </button>
+          )}
+        </div>
+      )}
+
       {/* ── 2. Channel Messages Area ──────────────────────────────── */}
       <div
         className="cc-discord-messages-scroll"
@@ -195,7 +284,7 @@ export default function ServerChatArea({
           padding: "20px 16px",
           display: "flex",
           flexDirection: "column",
-          gap: 16,
+          gap: 14,
         }}
       >
         {/* Welcome Channel Banner */}
@@ -224,7 +313,7 @@ export default function ServerChatArea({
           </p>
         </div>
 
-        {/* Messages List with Discord clustering */}
+        {/* Messages List with Discord clustering & live reactions */}
         {messages.map((msg, index) => {
           const prevMsg = index > 0 ? messages[index - 1] : null
           const isSameSenderAsPrev = prevMsg && prevMsg.senderId === msg.senderId
@@ -251,7 +340,7 @@ export default function ServerChatArea({
                 transition: "background 0.1s ease",
               }}
             >
-              {/* Message Hover Actions Bar */}
+              {/* Message Hover Actions Bar with Reaction Emojis */}
               {isHovered && (
                 <div
                   style={{
@@ -261,35 +350,33 @@ export default function ServerChatArea({
                     background: "#2b2d31",
                     border: "1px solid rgba(255, 255, 255, 0.1)",
                     borderRadius: 6,
-                    padding: "2px 4px",
+                    padding: "2px 6px",
                     display: "flex",
                     alignItems: "center",
-                    gap: 4,
+                    gap: 6,
                     zIndex: 20,
-                    boxShadow: "0 2px 8px rgba(0,0,0,0.4)",
+                    boxShadow: "0 2px 8px rgba(0,0,0,0.5)",
                   }}
                 >
-                  <button
-                    type="button"
-                    onClick={() => onSendMessage(`❤️ to "${msg.content.slice(0, 30)}..."`)}
-                    title="React with Love"
-                    style={{ background: "transparent", border: "none", cursor: "pointer", fontSize: 13, padding: "2px 4px" }}
-                  >
-                    ❤️
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onSendMessage(`🔥 to "${msg.content.slice(0, 30)}..."`)}
-                    title="React with Fire"
-                    style={{ background: "transparent", border: "none", cursor: "pointer", fontSize: 13, padding: "2px 4px" }}
-                  >
-                    🔥
-                  </button>
+                  {QUICK_EMOJIS.map((emoji) => (
+                    <button
+                      key={emoji}
+                      type="button"
+                      onClick={() => onReactMessage && onReactMessage(msg.id, emoji)}
+                      title={`React ${emoji}`}
+                      style={{ background: "transparent", border: "none", cursor: "pointer", fontSize: 13, padding: "2px" }}
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+
+                  <div style={{ width: 1, height: 14, background: "rgba(255,255,255,0.15)", margin: "0 2px" }} />
+
                   <button
                     type="button"
                     onClick={() => setInput(`@ai Explain this: "${msg.content.slice(0, 50)}"`)}
                     title="Ask AI to Explain"
-                    style={{ background: "transparent", border: "none", cursor: "pointer", fontSize: 13, padding: "2px 4px", color: T.primary }}
+                    style={{ background: "transparent", border: "none", cursor: "pointer", fontSize: 12, padding: "2px 4px", color: T.primary, fontWeight: 700 }}
                   >
                     ✦ AI
                   </button>
@@ -392,13 +479,69 @@ export default function ServerChatArea({
                     />
                   </div>
                 )}
+
+                {/* Live Emoji Reaction Pills */}
+                {msg.reactions && Object.keys(msg.reactions).length > 0 && (
+                  <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                    {Object.entries(msg.reactions).map(([emoji, userIds]) => {
+                      if (!Array.isArray(userIds) || userIds.length === 0) return null
+                      const hasReacted = userIds.includes(session?.user?.id)
+
+                      return (
+                        <button
+                          key={emoji}
+                          type="button"
+                          onClick={() => onReactMessage && onReactMessage(msg.id, emoji)}
+                          style={{
+                            background: hasReacted ? "rgba(88, 101, 242, 0.25)" : "#2b2d31",
+                            border: hasReacted ? "1px solid #5865F2" : "1px solid rgba(255, 255, 255, 0.1)",
+                            borderRadius: 6,
+                            padding: "2px 6px",
+                            fontSize: 12,
+                            color: hasReacted ? "#ffffff" : "#b5bac1",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 4,
+                            cursor: "pointer",
+                          }}
+                        >
+                          <span>{emoji}</span>
+                          <span style={{ fontSize: 11, fontWeight: 700 }}>{userIds.length}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
             </div>
           )
         })}
 
-        <div ref={bottomRef} style={{ height: 10 }} />
+        <div ref={bottomRef} style={{ height: 6 }} />
       </div>
+
+      {/* ── Live Typing Indicator Bar ────────────────────────────── */}
+      {typingNames.length > 0 && (
+        <div
+          style={{
+            padding: "0 18px 4px",
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            fontSize: 11,
+            color: "#949ba4",
+            background: "#1e1f22",
+          }}
+        >
+          <span className="typing-dot" style={{ width: 5, height: 5 }} />
+          <span className="typing-dot" style={{ width: 5, height: 5 }} />
+          <span className="typing-dot" style={{ width: 5, height: 5 }} />
+          <span style={{ fontWeight: 600, color: "#f2f3f5" }}>
+            {typingNames.slice(0, 3).join(", ")}
+          </span>
+          <span>{typingNames.length === 1 ? "is typing..." : "are typing..."}</span>
+        </div>
+      )}
 
       {/* ── 3. Discord-Style Rich Input Box ───────────────────────── */}
       <div
@@ -461,7 +604,7 @@ export default function ServerChatArea({
           {/* Text input */}
           <input
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={handleInputChange}
             onKeyDown={handleKeyDown}
             placeholder={`Message #${channel.name} (type @ai to summon AI Co-Pilot)...`}
             style={{

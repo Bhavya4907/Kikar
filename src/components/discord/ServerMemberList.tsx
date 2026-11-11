@@ -7,12 +7,14 @@ interface Props {
   members: DiscordMember[]
   onStartDM?: (userId: string) => void
   onOpenReplica?: (member: DiscordMember) => void
+  voiceConnected?: boolean
 }
 
 export default function ServerMemberList({
   members,
   onStartDM,
   onOpenReplica,
+  voiceConnected = false,
 }: Props) {
   const [selectedMember, setSelectedMember] = useState<DiscordMember | null>(null)
 
@@ -45,7 +47,14 @@ export default function ServerMemberList({
             <img
               src={m.avatar_url}
               alt=""
-              style={{ width: 32, height: 32, borderRadius: "50%", objectFit: "cover" }}
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: "50%",
+                objectFit: "cover",
+                outline: voiceConnected && m.role === "owner" ? "2px solid #22c55e" : "none",
+                outlineOffset: 2,
+              }}
             />
           ) : (
             <div
@@ -60,6 +69,8 @@ export default function ServerMemberList({
                 justifyContent: "center",
                 fontSize: 14,
                 fontWeight: 700,
+                outline: voiceConnected && m.role === "owner" ? "2px solid #22c55e" : "none",
+                outlineOffset: 2,
               }}
             >
               {m.is_bot ? "🤖" : m.is_replica ? "🪞" : "👤"}
@@ -74,7 +85,7 @@ export default function ServerMemberList({
               width: 9,
               height: 9,
               borderRadius: "50%",
-              background: m.is_online || m.is_bot ? "#22c55e" : "#80848e",
+              background: voiceConnected && m.role === "owner" ? "#22c55e" : m.is_online || m.is_bot ? "#22c55e" : "#80848e",
               border: "2px solid #18191c",
             }}
           />

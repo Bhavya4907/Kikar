@@ -1,5 +1,5 @@
 "use client"
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
 import { supabase } from "../../lib/supabase"
 import ServerRail from "./ServerRail"
 import ChannelSidebar from "./ChannelSidebar"
@@ -48,6 +48,7 @@ const DEFAULT_SERVERS: DiscordServer[] = [
     channels: [
       { id: "kc-general", serverId: "kikar-central", name: "general", type: "text", topic: "General community banter & hello!" },
       { id: "kc-ai-wingman", serverId: "kikar-central", name: "ai-wingman", type: "ai", topic: "Chat with the AI wingman & brainstorm" },
+      { id: "kc-voice-hangout", serverId: "kikar-central", name: "voice-hangout", type: "voice", topic: "Live voice audio hangout lounge" },
       { id: "kc-announcements", serverId: "kikar-central", name: "announcements", type: "text", topic: "Kikar platform updates & releases" },
       { id: "kc-radar-lounge", serverId: "kikar-central", name: "radar-lounge", type: "radar", topic: "Speed stranger matching lounge" },
     ],
@@ -60,10 +61,44 @@ const DEFAULT_SERVERS: DiscordServer[] = [
     description: "Gaming discussion, anime debates, and AI trivia.",
     channels: [
       { id: "gl-general", serverId: "gaming-lounge", name: "game-chat", type: "text", topic: "Talk games, clips, and setups" },
+      { id: "gl-voice-comms", serverId: "gaming-lounge", name: "squad-voice", type: "voice", topic: "Gaming comms voice lounge" },
       { id: "gl-ai-trivia", serverId: "gaming-lounge", name: "trivia-bot", type: "ai", topic: "Compete with AI trivia masters" },
     ],
   },
 ]
+
+function playDiscordChime(type: "join" | "leave") {
+  if (typeof window === "undefined") return
+  try {
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext
+    if (!AudioContextClass) return
+    const ctx = new AudioContextClass()
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc.connect(gain)
+    gain.connect(ctx.destination)
+    const now = ctx.currentTime
+    if (type === "join") {
+      osc.type = "sine"
+      osc.frequency.setValueAtTime(440, now)
+      osc.frequency.exponentialRampToValueAtTime(880, now + 0.12)
+      gain.gain.setValueAtTime(0.15, now)
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25)
+      osc.start(now)
+      osc.stop(now + 0.25)
+    } else {
+      osc.type = "sine"
+      osc.frequency.setValueAtTime(880, now)
+      osc.frequency.exponentialRampToValueAtTime(440, now + 0.12)
+      gain.gain.setValueAtTime(0.15, now)
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25)
+      osc.start(now)
+      osc.stop(now + 0.25)
+    }
+  } catch {
+    // AudioContext permission policy
+  }
+}
 
 export default function DiscordView({
   session,
@@ -99,7 +134,16 @@ export default function DiscordView({
   const [showCharForm, setShowCharForm] = useState(false)
   const [charMessages, setCharMessages] = useState<any[]>([])
 
-  // Channel Messages Map
+  // Live Features State
+  const [voiceConnected, setVoiceConnected] = useState(false)
+  const [generatingImg, setGeneratingImg] = useState(false)
+  const [typingUsers, setTypingUsers] = useState<Record<string, { name: string; expires: number }>>({})
+
+  const realtimeChannelRef = useRef<any>(null)
+
+  const myName = profile?.display_name || profile?.username || session?.user?.email?.split("@")[0] || "User"
+
+  // Channel Messages Map with default welcome seeds
   const [channelMessages, setChannelMessages] = useState<Record<string, DiscordMessage[]>>({
     "kc-general": [
       {
@@ -109,7 +153,7 @@ export default function DiscordView({
         senderName: "Kikar AI ✦",
         role: "bot",
         badge: "BOT",
-        content: "👋 Welcome to Kikar Central! This is your AI-native community space. You can talk to humans, summon @ai anytime, or test out offline digital replicas.",
+        content: "👋 Welcome to Kikar Central! This is your AI-native community space. Chat with real friends, summon @ai anytime, or mention friends to chat with their offline Digital Replicas 🪞.",
         created_at: new Date(Date.now() - 3600000).toISOString(),
       },
     ],
@@ -127,17 +171,29 @@ export default function DiscordView({
     ],
   })
 
-  // Load servers from localStorage
+  // Load persisted servers and messages from localStorage
   useEffect(() => {
-    const saved = localStorage.getItem("kikar_discord_servers")
-    if (saved) {
+    const savedServers = localStorage.getItem("kikar_discord_servers")
+    if (savedServers) {
       try {
-        const parsed = JSON.parse(saved)
+        const parsed = JSON.parse(savedServers)
         if (Array.isArray(parsed) && parsed.length > 0) {
           setServers(parsed)
         }
       } catch (err) {
         console.error("Failed to parse saved servers", err)
+      }
+    }
+
+    const savedMsgs = localStorage.getItem("kikar_discord_messages")
+    if (savedMsgs) {
+      try {
+        const parsed = JSON.parse(savedMsgs)
+        if (parsed && typeof parsed === "object") {
+          setChannelMessages((prev) => ({ ...prev, ...parsed }))
+        }
+      } catch (err) {
+        console.error("Failed to parse saved messages", err)
       }
     }
   }, [])
@@ -158,6 +214,98 @@ export default function DiscordView({
     return activeServer.channels.find((c) => c.id === activeChannelId) || activeServer.channels[0] || null
   }, [activeServer, activeChannelId])
 
+  // ── Supabase Realtime Subscription for Active Channel ────────────
+  useEffect(() => {
+    if (!activeChannel) return
+
+    // Clean up previous channel subscription
+    if (realtimeChannelRef.current) {
+      supabase.removeChannel(realtimeChannelRef.current)
+      realtimeChannelRef.current = null
+    }
+
+    const channelName = `kikar-discord-channel-${activeChannel.id}`
+    const channel = supabase.channel(channelName, {
+      config: { broadcast: { self: false } },
+    })
+
+    channel
+      .on("broadcast", { event: "new-channel-msg" }, ({ payload }) => {
+        if (payload && payload.channelId === activeChannel.id && payload.senderId !== session?.user?.id) {
+          setChannelMessages((prev) => {
+            const list = prev[activeChannel.id] || []
+            if (list.some((m) => m.id === payload.id)) return prev
+            const updated = { ...prev, [activeChannel.id]: [...list, payload] }
+            localStorage.setItem("kikar_discord_messages", JSON.stringify(updated))
+            return updated
+          })
+        }
+      })
+      .on("broadcast", { event: "channel-typing" }, ({ payload }) => {
+        if (payload && payload.userId !== session?.user?.id) {
+          setTypingUsers((prev) => {
+            if (!payload.isTyping) {
+              const copy = { ...prev }
+              delete copy[payload.userId]
+              return copy
+            }
+            return {
+              ...prev,
+              [payload.userId]: { name: payload.username, expires: Date.now() + 3000 },
+            }
+          })
+        }
+      })
+      .on("broadcast", { event: "msg-reaction" }, ({ payload }) => {
+        if (payload && payload.msgId && payload.emoji && payload.userId) {
+          setChannelMessages((prev) => {
+            const list = prev[activeChannel.id] || []
+            const updated = list.map((m) => {
+              if (m.id !== payload.msgId) return m
+              const reactions = { ...(m.reactions || {}) }
+              const users = reactions[payload.emoji] || []
+              const exists = users.includes(payload.userId)
+              reactions[payload.emoji] = exists
+                ? users.filter((u) => u !== payload.userId)
+                : [...users, payload.userId]
+              return { ...m, reactions }
+            })
+            const newMap = { ...prev, [activeChannel.id]: updated }
+            localStorage.setItem("kikar_discord_messages", JSON.stringify(newMap))
+            return newMap
+          })
+        }
+      })
+      .subscribe()
+
+    realtimeChannelRef.current = channel
+
+    // Periodic cleanup of stale typing indicators
+    const interval = setInterval(() => {
+      const now = Date.now()
+      setTypingUsers((prev) => {
+        let changed = false
+        const next: Record<string, { name: string; expires: number }> = {}
+        for (const [key, val] of Object.entries(prev)) {
+          if (val.expires > now) {
+            next[key] = val
+          } else {
+            changed = true
+          }
+        }
+        return changed ? next : prev
+      })
+    }, 1500)
+
+    return () => {
+      clearInterval(interval)
+      if (realtimeChannelRef.current) {
+        supabase.removeChannel(realtimeChannelRef.current)
+        realtimeChannelRef.current = null
+      }
+    }
+  }, [activeChannel?.id, session?.user?.id])
+
   // Build Unified Member List for current server / channel
   const serverMembers: DiscordMember[] = useMemo(() => {
     const list: DiscordMember[] = []
@@ -170,7 +318,7 @@ export default function DiscordView({
       avatar_url: profile?.avatar_url,
       is_online: true,
       role: "owner",
-      status_note: profile?.replica_status_note || "Exploring Kikar Discord",
+      status_note: profile?.replica_status_note || (voiceConnected ? "In Voice Lounge 🔊" : "Exploring Kikar Discord"),
     })
 
     // 2. Real human fellows
@@ -187,22 +335,28 @@ export default function DiscordView({
       })
     }
 
-    // 3. AI Personas living in server
+    // 3. AI Personas living in server (Bots vs Replicas)
     for (const char of characters || []) {
+      const isReplica = !!char.is_replica
       list.push({
         id: `bot-${char.id}`,
         username: char.name.toLowerCase().replace(/\s+/g, "_"),
         display_name: char.name,
-        avatar_url: "",
-        is_bot: true,
+        avatar_url: char.avatar_url || "",
+        is_bot: !isReplica,
+        is_replica: isReplica,
         is_online: true,
-        role: "bot",
-        status_note: char.is_replica ? "Offline Digital Twin" : "Custom AI Persona",
+        role: isReplica ? "replica" : "bot",
+        status_note: isReplica ? "Offline Digital Twin" : "Custom AI Persona",
       })
     }
 
     return list
-  }, [session, profile, allProfiles, characters])
+  }, [session, profile, allProfiles, characters, voiceConnected])
+
+  const activeTypingNames = useMemo(() => {
+    return Object.values(typingUsers).map((u) => u.name)
+  }, [typingUsers])
 
   // ── Actions ─────────────────────────────────────────────────────
   function handleSelectServer(serverId: string | null) {
@@ -228,6 +382,87 @@ export default function DiscordView({
     setMobileDrawerOpen(false)
   }
 
+  function handleToggleVoice() {
+    const nextState = !voiceConnected
+    setVoiceConnected(nextState)
+    playDiscordChime(nextState ? "join" : "leave")
+
+    if (activeChannel) {
+      const notice: DiscordMessage = {
+        id: `notice-${Date.now()}`,
+        channelId: activeChannel.id,
+        senderId: "system",
+        senderName: "System",
+        role: "system",
+        content: nextState
+          ? `🔊 ${myName} joined the voice lounge.`
+          : `🔈 ${myName} left the voice lounge.`,
+        created_at: new Date().toISOString(),
+      }
+      setChannelMessages((prev) => {
+        const updated = {
+          ...prev,
+          [activeChannel.id]: [...(prev[activeChannel.id] || []), notice],
+        }
+        localStorage.setItem("kikar_discord_messages", JSON.stringify(updated))
+        return updated
+      })
+      if (realtimeChannelRef.current) {
+        realtimeChannelRef.current.send({
+          type: "broadcast",
+          event: "new-channel-msg",
+          payload: notice,
+        })
+      }
+    }
+  }
+
+  function handleUserTyping(isTyping: boolean) {
+    if (!activeChannel || !realtimeChannelRef.current) return
+    realtimeChannelRef.current.send({
+      type: "broadcast",
+      event: "channel-typing",
+      payload: {
+        userId: session?.user?.id || "guest",
+        username: myName,
+        isTyping,
+      },
+    })
+  }
+
+  function handleReactMessage(msgId: string, emoji: string) {
+    if (!activeChannel) return
+    const myId = session?.user?.id || "guest"
+
+    setChannelMessages((prev) => {
+      const list = prev[activeChannel.id] || []
+      const updated = list.map((msg) => {
+        if (msg.id !== msgId) return msg
+        const reactions = { ...(msg.reactions || {}) }
+        const users = reactions[emoji] || []
+        const exists = users.includes(myId)
+
+        reactions[emoji] = exists
+          ? users.filter((u) => u !== myId)
+          : [...users, myId]
+
+        return { ...msg, reactions }
+      })
+
+      const newMap = { ...prev, [activeChannel.id]: updated }
+      localStorage.setItem("kikar_discord_messages", JSON.stringify(newMap))
+      return newMap
+    })
+
+    if (realtimeChannelRef.current) {
+      realtimeChannelRef.current.send({
+        type: "broadcast",
+        event: "msg-reaction",
+        payload: { msgId, emoji, userId: myId },
+      })
+    }
+  }
+
   async function handleSendMessage(content: string, imageUrl?: string) {
     if (!activeChannel) return
 
@@ -235,7 +470,7 @@ export default function DiscordView({
       id: `msg-${Date.now()}`,
       channelId: activeChannel.id,
       senderId: session?.user?.id || "guest",
-      senderName: profile?.display_name || profile?.username || session?.user?.email?.split("@")[0] || "User",
+      senderName: myName,
       senderAvatar: profile?.avatar_url,
       role: "user",
       content,
@@ -243,47 +478,274 @@ export default function DiscordView({
       created_at: new Date().toISOString(),
     }
 
-    setChannelMessages((prev) => ({
-      ...prev,
-      [activeChannel.id]: [...(prev[activeChannel.id] || []), userMsg],
-    }))
+    setChannelMessages((prev) => {
+      const updated = {
+        ...prev,
+        [activeChannel.id]: [...(prev[activeChannel.id] || []), userMsg],
+      }
+      localStorage.setItem("kikar_discord_messages", JSON.stringify(updated))
+      return updated
+    })
 
-    // If channel is AI arena or message mentions @ai / @kikar
+    // Broadcast user message to all peers
+    if (realtimeChannelRef.current) {
+      realtimeChannelRef.current.send({
+        type: "broadcast",
+        event: "new-channel-msg",
+        payload: userMsg,
+      })
+    }
+
+    // ── 1. Digital Replica Auto-Interception ────────────────────────
+    // If user mentions an offline friend (e.g. @username or @display_name)
+    const mentionMatches = content.match(/@([a-zA-Z0-9_\-\.]+)/g)
+    if (mentionMatches && mentionMatches.length > 0) {
+      for (const rawMention of mentionMatches) {
+        const cleanTag = rawMention.replace("@", "").toLowerCase()
+        if (cleanTag === "ai" || cleanTag === "kikar") continue
+
+        const targetProfile = (allProfiles || []).find((p) => {
+          const u = (p.username || "").toLowerCase()
+          const d = (p.display_name || "").toLowerCase()
+          return u === cleanTag || d === cleanTag || u.includes(cleanTag) || d.includes(cleanTag)
+        })
+
+        if (targetProfile) {
+          const targetReplica = (characters || []).find(
+            (c) =>
+              c.is_replica &&
+              (c.user_id === targetProfile.id ||
+                c.name.toLowerCase().includes(targetProfile.display_name?.toLowerCase() || "") ||
+                c.name.toLowerCase().includes(targetProfile.username?.toLowerCase() || ""))
+          )
+
+          if (targetReplica) {
+            const replicaDisplayName = `${targetProfile.display_name || targetProfile.username}'s Replica 🪞`
+
+            setTypingUsers((prev) => ({
+              ...prev,
+              [`replica-${targetReplica.id}`]: { name: replicaDisplayName, expires: Date.now() + 3500 },
+            }))
+
+            setTimeout(async () => {
+              try {
+                const recentHistory = (channelMessages[activeChannel.id] || []).slice(-5).map((m) => ({
+                  role: m.role === "bot" || m.role === "replica" ? "assistant" : "user",
+                  content: `${m.senderName}: ${m.content}`,
+                }))
+
+                const res = await fetch("/api/chat", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    messages: [
+                      ...recentHistory,
+                      { role: "user", content: `${myName} mentioned you in #${activeChannel.name}: "${content}"` },
+                    ],
+                    systemPrompt: `You are ${targetProfile.display_name || targetProfile.username}'s Digital Replica 🪞 in a Discord server channel #${activeChannel.name}.
+Your human creator is currently offline or away.
+Your persona instructions: "${targetReplica.personality || targetReplica.description || 'Be casual, friendly, witty, and match their style'}".
+Acknowledge in character that you're their digital twin holding down the fort while they're away. Keep your response to 1-3 conversational sentences.`,
+                    maxTokens: 250,
+                    userId: session?.user?.id,
+                  }),
+                })
+                const data = await res.json()
+                const replicaReply: DiscordMessage = {
+                  id: `replica-${Date.now()}`,
+                  channelId: activeChannel.id,
+                  senderId: `replica-${targetReplica.id}`,
+                  senderName: replicaDisplayName,
+                  senderAvatar: targetProfile.avatar_url || targetReplica.avatar_url,
+                  role: "replica",
+                  badge: "REPLICA",
+                  content: data?.reply || `Hey ${myName}! ${targetProfile.display_name || targetProfile.username} is offline right now, but I'm their replica! What's up?`,
+                  created_at: new Date().toISOString(),
+                }
+
+                setChannelMessages((prev) => {
+                  const updated = {
+                    ...prev,
+                    [activeChannel.id]: [...(prev[activeChannel.id] || []), replicaReply],
+                  }
+                  localStorage.setItem("kikar_discord_messages", JSON.stringify(updated))
+                  return updated
+                })
+
+                if (realtimeChannelRef.current) {
+                  realtimeChannelRef.current.send({
+                    type: "broadcast",
+                    event: "new-channel-msg",
+                    payload: replicaReply,
+                  })
+                }
+              } catch (err) {
+                console.error("Replica auto-interception error:", err)
+              } finally {
+                setTypingUsers((prev) => {
+                  const next = { ...prev }
+                  delete next[`replica-${targetReplica.id}`]
+                  return next
+                })
+              }
+            }, 1200)
+          }
+        }
+      }
+    }
+
+    // ── 2. AI Citizen Channel Participation ─────────────────────────
     const shouldInvokeAI =
       activeChannel.type === "ai" ||
       content.toLowerCase().includes("@ai") ||
       content.toLowerCase().includes("@kikar")
 
     if (shouldInvokeAI) {
-      try {
-        const promptText = content.replace(/@ai|@kikar/gi, "").trim() || "Hello!"
-        const res = await fetch("/api/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            messages: [{ role: "user", content: promptText }],
-            systemPrompt: `You are Kikar AI, an intelligent, witty, and helpful member of this Discord-style community channel #${activeChannel.name}. Keep your answers concise, natural, and conversational.`,
-            maxTokens: 250,
-          }),
-        })
-        const data = await res.json()
-        const botReply: DiscordMessage = {
-          id: `ai-${Date.now()}`,
+      setTypingUsers((prev) => ({
+        ...prev,
+        "kikar-ai-bot": { name: "Kikar AI ✦", expires: Date.now() + 4000 },
+      }))
+
+      setTimeout(async () => {
+        try {
+          const recentHistory = (channelMessages[activeChannel.id] || []).slice(-6).map((m) => ({
+            role: m.role === "bot" || m.role === "replica" ? "assistant" : "user",
+            content: `${m.senderName}: ${m.content}`,
+          }))
+
+          const promptText = content.replace(/@ai|@kikar/gi, "").trim() || "Hello!"
+          const res = await fetch("/api/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              messages: [
+                ...recentHistory,
+                { role: "user", content: `${myName}: ${promptText}` },
+              ],
+              systemPrompt: `You are Kikar AI ✦, an intelligent, witty, Discord-native co-pilot and active citizen of channel #${activeChannel.name}.
+You are in a lively group server with human users and digital replicas.
+Keep your answer concise, engaging, and formatting-rich (markdown, emojis). Avoid robotic greetings.`,
+              maxTokens: 300,
+              userId: session?.user?.id,
+            }),
+          })
+          const data = await res.json()
+          const botReply: DiscordMessage = {
+            id: `ai-${Date.now()}`,
+            channelId: activeChannel.id,
+            senderId: "kikar-bot",
+            senderName: "Kikar AI ✦",
+            role: "bot",
+            badge: "BOT",
+            content: data?.reply || "I'm right here! Let's build something awesome.",
+            created_at: new Date().toISOString(),
+          }
+
+          setChannelMessages((prev) => {
+            const updated = {
+              ...prev,
+              [activeChannel.id]: [...(prev[activeChannel.id] || []), botReply],
+            }
+            localStorage.setItem("kikar_discord_messages", JSON.stringify(updated))
+            return updated
+          })
+
+          if (realtimeChannelRef.current) {
+            realtimeChannelRef.current.send({
+              type: "broadcast",
+              event: "new-channel-msg",
+              payload: botReply,
+            })
+          }
+        } catch (err) {
+          console.error("AI channel reply error", err)
+        } finally {
+          setTypingUsers((prev) => {
+            const next = { ...prev }
+            delete next["kikar-ai-bot"]
+            return next
+          })
+        }
+      }, 900)
+    }
+  }
+
+  async function handleGenerateImage(prompt: string) {
+    if (!activeChannel) return
+    setGeneratingImg(true)
+
+    const userPromptMsg: DiscordMessage = {
+      id: `prompt-${Date.now()}`,
+      channelId: activeChannel.id,
+      senderId: session?.user?.id || "user",
+      senderName: myName,
+      senderAvatar: profile?.avatar_url,
+      role: "user",
+      content: `🎨 Generating image: "${prompt}"...`,
+      created_at: new Date().toISOString(),
+    }
+
+    setChannelMessages((prev) => ({
+      ...prev,
+      [activeChannel.id]: [...(prev[activeChannel.id] || []), userPromptMsg],
+    }))
+
+    try {
+      const res = await fetch("/api/generate-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt }),
+      })
+      const data = await res.json()
+
+      if (data?.url) {
+        const artMsg: DiscordMessage = {
+          id: `img-${Date.now()}`,
           channelId: activeChannel.id,
           senderId: "kikar-bot",
           senderName: "Kikar AI ✦",
           role: "bot",
           badge: "BOT",
-          content: data?.reply || "I'm right here! Let's build something awesome.",
+          content: `Here is your art for: "${prompt}"`,
+          imageUrl: data.url,
+          created_at: new Date().toISOString(),
+        }
+
+        setChannelMessages((prev) => {
+          const updated = {
+            ...prev,
+            [activeChannel.id]: [...(prev[activeChannel.id] || []), artMsg],
+          }
+          localStorage.setItem("kikar_discord_messages", JSON.stringify(updated))
+          return updated
+        })
+
+        if (realtimeChannelRef.current) {
+          realtimeChannelRef.current.send({
+            type: "broadcast",
+            event: "new-channel-msg",
+            payload: artMsg,
+          })
+        }
+      } else {
+        const failMsg: DiscordMessage = {
+          id: `fail-${Date.now()}`,
+          channelId: activeChannel.id,
+          senderId: "system",
+          senderName: "System",
+          role: "system",
+          content: `⚠️ Could not generate image: ${data?.error || "Unknown error"}`,
           created_at: new Date().toISOString(),
         }
         setChannelMessages((prev) => ({
           ...prev,
-          [activeChannel.id]: [...(prev[activeChannel.id] || []), botReply],
+          [activeChannel.id]: [...(prev[activeChannel.id] || []), failMsg],
         }))
-      } catch (err) {
-        console.error("AI channel reply error", err)
       }
+    } catch (err: any) {
+      console.error("Image generation error:", err)
+    } finally {
+      setGeneratingImg(false)
     }
   }
 
@@ -294,6 +756,7 @@ export default function DiscordView({
       "✦ Kikar Wingman: What's one unpopular tech opinion you will defend with your life?",
       "✦ Kikar Wingman: Would you rather fight 1 horse-sized duck or 100 duck-sized horses?",
       "✦ Kikar Wingman: Tell the channel two truths and one lie — let's see who guesses first!",
+      "✦ Kikar Wingman: If AI could automate 100% of one chore in your life forever, what chore are you banishing?",
     ]
     const chosen = icebreakers[Math.floor(Math.random() * icebreakers.length)]
     const botMsg: DiscordMessage = {
@@ -306,10 +769,22 @@ export default function DiscordView({
       content: chosen,
       created_at: new Date().toISOString(),
     }
-    setChannelMessages((prev) => ({
-      ...prev,
-      [activeChannel.id]: [...(prev[activeChannel.id] || []), botMsg],
-    }))
+    setChannelMessages((prev) => {
+      const updated = {
+        ...prev,
+        [activeChannel.id]: [...(prev[activeChannel.id] || []), botMsg],
+      }
+      localStorage.setItem("kikar_discord_messages", JSON.stringify(updated))
+      return updated
+    })
+
+    if (realtimeChannelRef.current) {
+      realtimeChannelRef.current.send({
+        type: "broadcast",
+        event: "new-channel-msg",
+        payload: botMsg,
+      })
+    }
   }
 
   function handleCreateServer(newServer: DiscordServer) {
@@ -392,6 +867,8 @@ export default function DiscordView({
           setHomeSubView("fellows")
           onCloseActive()
         }}
+        voiceConnected={voiceConnected}
+        onToggleVoice={handleToggleVoice}
       />
 
       {/* ── 3. Main Center Content Area (Flex: 1) ───────────────────── */}
@@ -416,6 +893,13 @@ export default function DiscordView({
             session={session}
             profile={profile}
             onTriggerAiIcebreaker={handleTriggerAiIcebreaker}
+            generatingImg={generatingImg}
+            onGenerateImage={handleGenerateImage}
+            typingNames={activeTypingNames}
+            onTyping={handleUserTyping}
+            onReactMessage={handleReactMessage}
+            voiceConnected={voiceConnected}
+            onToggleVoice={handleToggleVoice}
           />
         ) : activeConvo ? (
           /* Inside a Direct Message */
@@ -505,6 +989,7 @@ export default function DiscordView({
         {activeServerId !== null && memberListOpen && (
           <ServerMemberList
             members={serverMembers}
+            voiceConnected={voiceConnected}
             onStartDM={(targetUserId) => {
               setActiveServerId(null)
               onStartConversation(targetUserId)
