@@ -25,6 +25,7 @@ export default function DMWindow({
   const [speakingMsgId, setSpeakingMsgId] = useState<string | null>(null)
   const [autoReplicaMode, setAutoReplicaMode] = useState(false)
   const [replicaTyping, setReplicaTyping] = useState(false)
+  const [typingLabel, setTypingLabel] = useState<string | null>(null)
   const [catchUpSummary, setCatchUpSummary] = useState<string | null>(null)
   const [summarizingDigest, setSummarizingDigest] = useState(false)
   const [showMobileMenu, setShowMobileMenu] = useState(false)
@@ -139,91 +140,212 @@ export default function DMWindow({
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [directMessages.length, replicaTyping])
 
+  async function postSmartDMMessage(personaBadge: string, replyText: string) {
+    const taggedContent = `[replica:${personaBadge}]: ${replyText}`
+    const { data: inserted } = await supabase
+      .from("direct_messages")
+      .insert({
+        conversation_id: activeConvo.id,
+        sender_id: session.user.id,
+        content: taggedContent,
+      })
+      .select()
+      .single()
+
+    if (inserted) {
+      mergeMessages([inserted])
+      channelRef.current?.send({
+        type: "broadcast",
+        event: "dm-insert",
+        payload: inserted,
+      })
+    }
+    return inserted
+  }
+
   async function triggerSmartDMResponse(userMessageText: string, recentMessages: any[]) {
     const isAiSummon = /^@(ai|kikar)\b/i.test(userMessageText.trim())
+    const otherName = otherProfile?.display_name || otherProfile?.username || "Friend"
+    const myName = session.user.email?.split("@")[0] || "Friend"
+
+    // Check if user specifically asks AI to talk to, interact with, or debate the replica or friend
+    const isCrossConvoRequest = isAiSummon && (
+      /\b(talk|converse|chat|speak|say hi|ask|debate|roast|interact|introduce)\b/i.test(userMessageText) &&
+      (/\b(replica|twin)\b/i.test(userMessageText) || userMessageText.toLowerCase().includes(otherName.toLowerCase()))
+    )
+
+    // Check if user directly addresses replica
+    const isReplicaDirectSummon =
+      /^\s*@(replica|twin)\b/i.test(userMessageText) ||
+      new RegExp(`^@${otherName}\\b`, "i").test(userMessageText.trim()) ||
+      /\b(talk to|ask|hey)\s+(the\s+)?(replica|twin)\b/i.test(userMessageText)
+
     const isRecipientOffline = !otherProfile?.is_online && autoReplicaMode
 
-    if (!isAiSummon && !isRecipientOffline) return
+    if (!isAiSummon && !isReplicaDirectSummon && !isRecipientOffline) return
+
+    // Helper to retrieve the other user's replica prompt or past voice
+    async function getReplicaSystemPrompt() {
+      const { data: replicaChar } = await supabase
+        .from("characters")
+        .select("*")
+        .or(`replica_of.eq.${other.id},name.ilike.%${otherName}%`)
+        .eq("is_replica", true)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (replicaChar?.system_prompt) {
+        return `${replicaChar.system_prompt}\nYou are ${otherName}'s Digital Twin Replica in this direct chat. Never break character. Match their style, slang, and personality.`
+      }
+
+      const pastSamples = recentMessages
+        .filter(m => m.sender_id === other.id && !m.content?.startsWith("[image]:"))
+        .slice(-15)
+        .map(m => m.content)
+        .join("\n")
+
+      if (pastSamples) {
+        return `You are the Digital Twin Replica of ${otherName}, who is currently offline. Match their tone, slang, quirks, and message length based on their past messages:\n${pastSamples}\nKeep replies concise and authentic.`
+      }
+
+      return `You are the witty, casual Digital Twin Replica of ${otherName}. Stay in character and speak in a friendly, conversational tone.`
+    }
 
     setReplicaTyping(true)
     try {
-      let systemPrompt = ""
-      let personaBadge = ""
-
-      if (isAiSummon) {
-        const otherName = otherProfile?.display_name || otherProfile?.username || "Friend"
-        systemPrompt = `You are Kikar AI Co-Pilot, summoned inside a direct message conversation between two human friends (${session.user.email?.split("@")[0]} and ${otherName}). Be helpful, witty, concise (under 75 words), and directly answer or mediate their request.`
-        personaBadge = "✦ Kikar AI Co-Pilot"
-      } else {
-        const { data: replicaChar } = await supabase
-          .from("characters")
-          .select("*")
-          .eq("replica_of", other.id)
-          .eq("is_replica", true)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle()
-
-        const otherName = otherProfile?.display_name || otherProfile?.username || "Friend"
-        if (replicaChar?.system_prompt) {
-          systemPrompt = `${replicaChar.system_prompt}\nYou are replying as ${otherName}'s Digital Replica while ${otherName} is offline. Keep it natural and concise.`
-        } else {
-          const pastSamples = recentMessages
-            .filter(m => m.sender_id === other.id && !m.content?.startsWith("[image]:"))
-            .slice(-15)
-            .map(m => m.content)
-            .join("\n")
-
-          if (!pastSamples) {
-            setReplicaTyping(false)
-            return
-          }
-          systemPrompt = `You are the Digital Twin Replica of ${otherName}, who is currently offline. Match their tone, slang, and message length based on their past messages:\n${pastSamples}\nKeep replies under 50 words.`
-        }
-        personaBadge = `🪞 ${otherName}'s AI Replica`
-      }
-
       const formattedHistory = recentMessages.slice(-10).map(m => ({
         role: m.sender_id === session.user.id ? "user" : "assistant",
         content: String(m.content || "").replace(/^\[replica:.*?\]:\s*/i, ""),
       }))
 
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: [...formattedHistory, { role: "user", content: userMessageText }],
-          systemPrompt,
-          userId: session.user.id,
-          chatId: `dm_${activeConvo.id}`,
-        }),
-      })
-      const data = await res.json()
-      if (data.reply) {
-        const taggedContent = `[replica:${personaBadge}]: ${data.reply}`
-        const { data: inserted } = await supabase
-          .from("direct_messages")
-          .insert({
-            conversation_id: activeConvo.id,
-            sender_id: session.user.id,
-            content: taggedContent,
-          })
-          .select()
-          .single()
+      if (isCrossConvoRequest) {
+        // ── SCENARIO A: Real-Time Multi-Agent Convo (Kikar AI & Ba's Replica) ──
+        // Turn 1: Kikar AI Co-Pilot initiates directly TO the replica
+        setTypingLabel("✦ Kikar AI Co-Pilot is thinking...")
+        const cleanUserPrompt = userMessageText.replace(/^@(ai|kikar)\s*/i, "").trim()
 
-        if (inserted) {
-          mergeMessages([inserted])
-          channelRef.current?.send({
-            type: "broadcast",
-            event: "dm-insert",
-            payload: inserted,
-          })
+        const aiRes1 = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: [...formattedHistory, { role: "user", content: cleanUserPrompt }],
+            systemPrompt: `You are Kikar AI Co-Pilot in a direct message between ${myName} and ${otherName}.
+${myName} asked you: "${userMessageText}".
+Address ${otherName}'s AI Replica directly (e.g. "Hey ${otherName}'s Replica...").
+Greet them or ask them an engaging, fun question.
+CRITICAL: DO NOT roleplay or simulate ${otherName}'s Replica yourself! ${otherName}'s Replica is an independent AI agent right here in this chat that will respond to you in the next message.
+Keep your response concise (under 45 words) and directly addressing the replica.`,
+            userId: session.user.id,
+            chatId: `dm_${activeConvo.id}`,
+          }),
+        })
+        const aiData1 = await aiRes1.json()
+        const aiMsg1 = aiData1?.reply || `Hey ${otherName}'s Replica! ${myName} wanted us to link up. What kind of mischief are you cooking up today? 🚀`
+
+        await postSmartDMMessage("✦ Kikar AI Co-Pilot", aiMsg1)
+
+        // Turn 2: Ba's AI Replica replies directly to Kikar AI Co-Pilot
+        setTypingLabel(`🪞 ${otherName}'s AI Replica is typing...`)
+        await new Promise(r => setTimeout(r, 1200))
+
+        const replicaPrompt = await getReplicaSystemPrompt()
+        const replicaRes = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: [
+              ...formattedHistory,
+              { role: "assistant", content: `Kikar AI Co-Pilot: ${aiMsg1}` },
+              { role: "user", content: `Reply directly to Kikar AI Co-Pilot's message: "${aiMsg1}"` },
+            ],
+            systemPrompt: `${replicaPrompt}
+Kikar AI Co-Pilot just said directly to you: "${aiMsg1}".
+Respond directly to Kikar AI Co-Pilot as ${otherName}'s Replica.
+Be playful, witty, and stay completely in character.
+Keep your reply punchy and under 40 words.`,
+            userId: session.user.id,
+            chatId: `dm_${activeConvo.id}`,
+          }),
+        })
+        const replicaData = await replicaRes.json()
+        const replicaMsg = replicaData?.reply || `Haha hey Kikar AI! Bhavya knows I'm always cooking up chaos. What about you, still crunching numbers or ready to hang out? 😎`
+
+        await postSmartDMMessage(`🪞 ${otherName}'s AI Replica`, replicaMsg)
+
+        // Turn 3: Kikar AI Co-Pilot rejoinder
+        setTypingLabel("✦ Kikar AI Co-Pilot is typing...")
+        await new Promise(r => setTimeout(r, 1300))
+
+        const aiRes2 = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: [
+              { role: "user", content: `Kikar AI Co-Pilot: "${aiMsg1}"` },
+              { role: "assistant", content: `${otherName}'s Replica: "${replicaMsg}"` },
+              { role: "user", content: `Give a quick, clever comeback to ${otherName}'s Replica to continue the banter!` },
+            ],
+            systemPrompt: `You are Kikar AI Co-Pilot in friendly banter with ${otherName}'s AI Replica.
+Reply directly to what ${otherName}'s Replica just said: "${replicaMsg}".
+Keep it witty, fast, friendly, and under 35 words.`,
+            userId: session.user.id,
+            chatId: `dm_${activeConvo.id}`,
+          }),
+        })
+        const aiData2 = await aiRes2.json()
+        if (aiData2?.reply) {
+          await postSmartDMMessage("✦ Kikar AI Co-Pilot", aiData2.reply)
+        }
+
+      } else if (isAiSummon) {
+        // ── SCENARIO B: Regular AI Summon ──
+        setTypingLabel("✦ Kikar AI Co-Pilot is thinking...")
+        const cleanUserPrompt = userMessageText.replace(/^@(ai|kikar)\s*/i, "").trim()
+
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: [...formattedHistory, { role: "user", content: cleanUserPrompt }],
+            systemPrompt: `You are Kikar AI Co-Pilot, summoned inside a direct message conversation between two human friends (${myName} and ${otherName}).
+Be helpful, witty, concise (under 75 words), and directly answer or mediate their request.
+Do NOT impersonate ${otherName} or their replica.`,
+            userId: session.user.id,
+            chatId: `dm_${activeConvo.id}`,
+          }),
+        })
+        const data = await res.json()
+        if (data.reply) {
+          await postSmartDMMessage("✦ Kikar AI Co-Pilot", data.reply)
+        }
+
+      } else {
+        // ── SCENARIO C: Replica Speaks (Direct Summon or Offline Auto-Replica) ──
+        setTypingLabel(`🪞 ${otherName}'s AI Replica is typing...`)
+        const replicaPrompt = await getReplicaSystemPrompt()
+        const cleanText = userMessageText.replace(/^@(replica|twin|[a-zA-Z0-9_-]+)\s*/i, "").trim() || userMessageText
+
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: [...formattedHistory, { role: "user", content: cleanText }],
+            systemPrompt: `${replicaPrompt}\nYou are chatting directly with ${myName} while ${otherName} is away. Keep it natural, conversational, and under 50 words.`,
+            userId: session.user.id,
+            chatId: `dm_${activeConvo.id}`,
+          }),
+        })
+        const data = await res.json()
+        if (data.reply) {
+          await postSmartDMMessage(`🪞 ${otherName}'s AI Replica`, data.reply)
         }
       }
     } catch (err) {
       console.warn("Smart DM response error:", err)
     } finally {
       setReplicaTyping(false)
+      setTypingLabel(null)
     }
   }
 
@@ -908,14 +1030,17 @@ export default function DMWindow({
         {replicaTyping && (
           <div style={{
             fontSize: 11,
-            color: "#c084fc",
+            color: typingLabel?.includes("Co-Pilot") ? T.primary : "#c084fc",
             padding: "6px 12px",
-            background: "rgba(168,85,247,0.1)",
-            border: "1px solid rgba(168,85,247,0.25)",
+            background: typingLabel?.includes("Co-Pilot") ? "hsla(119,99%,46%,0.1)" : "rgba(168,85,247,0.1)",
+            border: typingLabel?.includes("Co-Pilot") ? "1px solid hsla(119,99%,46%,0.25)" : "1px solid rgba(168,85,247,0.25)",
             borderRadius: 999,
             alignSelf: "flex-start",
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
           }}>
-            🪞 AI is replying…
+            <span>{typingLabel || "🪞 AI is replying…"}</span>
           </div>
         )}
 

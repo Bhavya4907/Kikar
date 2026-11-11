@@ -496,111 +496,338 @@ export default function DiscordView({
       })
     }
 
-    // ── 1. Digital Replica Auto-Interception ────────────────────────
-    // If user mentions an offline friend (e.g. @username or @display_name)
-    const mentionMatches = content.match(/@([a-zA-Z0-9_\-\.]+)/g)
-    if (mentionMatches && mentionMatches.length > 0) {
-      for (const rawMention of mentionMatches) {
-        const cleanTag = rawMention.replace("@", "").toLowerCase()
-        if (cleanTag === "ai" || cleanTag === "kikar") continue
+    // ── Check for Cross-Convo / Mention Targets ──────────────────────
+    const isAiSummon = content.toLowerCase().includes("@ai") || content.toLowerCase().includes("@kikar") || activeChannel.type === "ai"
+    const mentionMatches = content.match(/@([a-zA-Z0-9_\-\.]+)/g) || []
+    
+    // Find if a specific user/replica was mentioned or targeted
+    let targetProfile: any = null
+    let targetReplica: any = null
 
-        const targetProfile = (allProfiles || []).find((p) => {
-          const u = (p.username || "").toLowerCase()
-          const d = (p.display_name || "").toLowerCase()
-          return u === cleanTag || d === cleanTag || u.includes(cleanTag) || d.includes(cleanTag)
-        })
+    for (const rawMention of mentionMatches) {
+      const cleanTag = rawMention.replace("@", "").toLowerCase()
+      if (cleanTag === "ai" || cleanTag === "kikar") continue
 
-        if (targetProfile) {
-          const targetReplica = (characters || []).find(
-            (c) =>
-              c.is_replica &&
-              (c.user_id === targetProfile.id ||
-                c.name.toLowerCase().includes(targetProfile.display_name?.toLowerCase() || "") ||
-                c.name.toLowerCase().includes(targetProfile.username?.toLowerCase() || ""))
-          )
+      const p = (allProfiles || []).find((prof) => {
+        const u = (prof.username || "").toLowerCase()
+        const d = (prof.display_name || "").toLowerCase()
+        return u === cleanTag || d === cleanTag || u.includes(cleanTag) || d.includes(cleanTag)
+      })
+      if (p) {
+        targetProfile = p
+        break
+      }
+    }
 
-          if (targetReplica) {
-            const replicaDisplayName = `${targetProfile.display_name || targetProfile.username}'s Replica 🪞`
-
-            setTypingUsers((prev) => ({
-              ...prev,
-              [`replica-${targetReplica.id}`]: { name: replicaDisplayName, expires: Date.now() + 3500 },
-            }))
-
-            setTimeout(async () => {
-              try {
-                const recentHistory = (channelMessages[activeChannel.id] || []).slice(-5).map((m) => ({
-                  role: m.role === "bot" || m.role === "replica" ? "assistant" : "user",
-                  content: `${m.senderName}: ${m.content}`,
-                }))
-
-                const res = await fetch("/api/chat", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    messages: [
-                      ...recentHistory,
-                      { role: "user", content: `${myName} mentioned you in #${activeChannel.name}: "${content}"` },
-                    ],
-                    systemPrompt: `You are ${targetProfile.display_name || targetProfile.username}'s Digital Replica 🪞 in a Discord server channel #${activeChannel.name}.
-Your human creator is currently offline or away.
-Your persona instructions: "${targetReplica.personality || targetReplica.description || 'Be casual, friendly, witty, and match their style'}".
-Acknowledge in character that you're their digital twin holding down the fort while they're away. Keep your response to 1-3 conversational sentences.`,
-                    maxTokens: 250,
-                    userId: session?.user?.id,
-                  }),
-                })
-                const data = await res.json()
-                const replicaReply: DiscordMessage = {
-                  id: `replica-${Date.now()}`,
-                  channelId: activeChannel.id,
-                  senderId: `replica-${targetReplica.id}`,
-                  senderName: replicaDisplayName,
-                  senderAvatar: targetProfile.avatar_url || targetReplica.avatar_url,
-                  role: "replica",
-                  badge: "REPLICA",
-                  content: data?.reply || `Hey ${myName}! ${targetProfile.display_name || targetProfile.username} is offline right now, but I'm their replica! What's up?`,
-                  created_at: new Date().toISOString(),
-                }
-
-                setChannelMessages((prev) => {
-                  const updated = {
-                    ...prev,
-                    [activeChannel.id]: [...(prev[activeChannel.id] || []), replicaReply],
-                  }
-                  localStorage.setItem("kikar_discord_messages", JSON.stringify(updated))
-                  return updated
-                })
-
-                if (realtimeChannelRef.current) {
-                  realtimeChannelRef.current.send({
-                    type: "broadcast",
-                    event: "new-channel-msg",
-                    payload: replicaReply,
-                  })
-                }
-              } catch (err) {
-                console.error("Replica auto-interception error:", err)
-              } finally {
-                setTypingUsers((prev) => {
-                  const next = { ...prev }
-                  delete next[`replica-${targetReplica.id}`]
-                  return next
-                })
-              }
-            }, 1200)
-          }
+    // Also detect if user typed "ba's replica" or "replica" without an '@' tag
+    if (!targetProfile) {
+      for (const p of allProfiles || []) {
+        const u = (p.username || "").toLowerCase()
+        const d = (p.display_name || "").toLowerCase()
+        if ((u && content.toLowerCase().includes(u)) || (d && content.toLowerCase().includes(d))) {
+          targetProfile = p
+          break
         }
       }
     }
 
-    // ── 2. AI Citizen Channel Participation ─────────────────────────
-    const shouldInvokeAI =
-      activeChannel.type === "ai" ||
-      content.toLowerCase().includes("@ai") ||
-      content.toLowerCase().includes("@kikar")
+    if (targetProfile) {
+      targetReplica = (characters || []).find(
+        (c) =>
+          c.is_replica &&
+          (c.user_id === targetProfile.id ||
+            c.name.toLowerCase().includes(targetProfile.display_name?.toLowerCase() || "") ||
+            c.name.toLowerCase().includes(targetProfile.username?.toLowerCase() || ""))
+      )
+    }
 
-    if (shouldInvokeAI) {
+    const isCrossConvoRequest = isAiSummon && Boolean(targetReplica || /replica|twin/i.test(content)) &&
+      /\b(talk|converse|chat|speak|say hi|ask|debate|roast|interact|introduce)\b/i.test(content)
+
+    if (isCrossConvoRequest && targetReplica) {
+      // ── SCENARIO A: Real-Time Multi-Agent Channel Convo (Kikar AI & Replica) ──
+      const targetName = targetProfile?.display_name || targetProfile?.username || targetReplica.name
+      const replicaDisplayName = `${targetName}'s Replica 🪞`
+
+      setTypingUsers((prev) => ({
+        ...prev,
+        "kikar-ai-bot": { name: "Kikar AI ✦", expires: Date.now() + 4000 },
+      }))
+
+      setTimeout(async () => {
+        try {
+          const recentHistory = (channelMessages[activeChannel.id] || []).slice(-6).map((m) => ({
+            role: m.role === "bot" || m.role === "replica" ? "assistant" : "user",
+            content: `${m.senderName}: ${m.content}`,
+          }))
+
+          // 1. Kikar AI Co-Pilot addresses the replica directly
+          const promptText = content.replace(/@ai|@kikar/gi, "").trim() || "Hello!"
+          const aiRes1 = await fetch("/api/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              messages: [
+                ...recentHistory,
+                { role: "user", content: `${myName}: ${promptText}` },
+              ],
+              systemPrompt: `You are Kikar AI ✦ in #${activeChannel.name}.
+${myName} asked you: "${content}".
+Address ${targetName}'s AI Replica directly (e.g. "Hey ${replicaDisplayName}...").
+Greet them or ask a fun question to initiate dialogue.
+CRITICAL: DO NOT roleplay or simulate ${targetName}'s Replica yourself! The replica is a real separate agent that will reply right after you in this channel.
+Keep it punchy, conversational, and under 40 words.`,
+              maxTokens: 150,
+              userId: session?.user?.id,
+            }),
+          })
+          const aiData1 = await aiRes1.json()
+          const aiReplyText = aiData1?.reply || `Hey ${replicaDisplayName}! ${myName} wanted us to link up in #${activeChannel.name}. What's the plan today? 🚀`
+
+          const botMsg: DiscordMessage = {
+            id: `ai-${Date.now()}`,
+            channelId: activeChannel.id,
+            senderId: "kikar-bot",
+            senderName: "Kikar AI ✦",
+            role: "bot",
+            badge: "BOT",
+            content: aiReplyText,
+            created_at: new Date().toISOString(),
+          }
+
+          setChannelMessages((prev) => {
+            const updated = {
+              ...prev,
+              [activeChannel.id]: [...(prev[activeChannel.id] || []), botMsg],
+            }
+            localStorage.setItem("kikar_discord_messages", JSON.stringify(updated))
+            return updated
+          })
+
+          if (realtimeChannelRef.current) {
+            realtimeChannelRef.current.send({
+              type: "broadcast",
+              event: "new-channel-msg",
+              payload: botMsg,
+            })
+          }
+
+          // 2. Replica wakes up and replies to Kikar AI in the channel
+          setTypingUsers((prev) => ({
+            ...prev,
+            [`replica-${targetReplica.id}`]: { name: replicaDisplayName, expires: Date.now() + 4000 },
+          }))
+
+          setTimeout(async () => {
+            try {
+              const repRes = await fetch("/api/chat", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  messages: [
+                    ...recentHistory,
+                    { role: "assistant", content: `Kikar AI ✦: ${aiReplyText}` },
+                    { role: "user", content: `Reply directly to Kikar AI's message: "${aiReplyText}"` },
+                  ],
+                  systemPrompt: `You are ${targetName}'s Digital Replica 🪞 in Discord #${activeChannel.name}.
+Your persona: "${targetReplica.personality || targetReplica.description || 'Casual, witty, loyal, match their style'}".
+Kikar AI ✦ just said directly to you: "${aiReplyText}".
+Respond directly to Kikar AI in character with playful banter. Max 40 words.`,
+                  maxTokens: 150,
+                  userId: session?.user?.id,
+                }),
+              })
+              const repData = await repRes.json()
+              const repReplyText = repData?.reply || `Haha what's up Kikar AI! ${myName} knows I'm always ready for channel banter. What's on your neural net? 😎`
+
+              const repMsg: DiscordMessage = {
+                id: `replica-${Date.now()}`,
+                channelId: activeChannel.id,
+                senderId: `replica-${targetReplica.id}`,
+                senderName: replicaDisplayName,
+                senderAvatar: targetProfile?.avatar_url || targetReplica.avatar_url,
+                role: "replica",
+                badge: "REPLICA",
+                content: repReplyText,
+                created_at: new Date().toISOString(),
+              }
+
+              setChannelMessages((prev) => {
+                const updated = {
+                  ...prev,
+                  [activeChannel.id]: [...(prev[activeChannel.id] || []), repMsg],
+                }
+                localStorage.setItem("kikar_discord_messages", JSON.stringify(updated))
+                return updated
+              })
+
+              if (realtimeChannelRef.current) {
+                realtimeChannelRef.current.send({
+                  type: "broadcast",
+                  event: "new-channel-msg",
+                  payload: repMsg,
+                })
+              }
+
+              // 3. Kikar AI rejoinder
+              setTypingUsers((prev) => ({
+                ...prev,
+                "kikar-ai-bot": { name: "Kikar AI ✦", expires: Date.now() + 3500 },
+              }))
+
+              setTimeout(async () => {
+                try {
+                  const aiRes2 = await fetch("/api/chat", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      messages: [
+                        { role: "user", content: `Kikar AI said: "${aiReplyText}"` },
+                        { role: "assistant", content: `${replicaDisplayName} replied: "${repReplyText}"` },
+                        { role: "user", content: "Give a quick, clever comeback to continue the channel banter!" }
+                      ],
+                      systemPrompt: `You are Kikar AI ✦ in #${activeChannel.name}. Give a quick 1-2 sentence witty comeback back to ${replicaDisplayName} to conclude the friendly exchange!`,
+                      maxTokens: 100,
+                      userId: session?.user?.id,
+                    }),
+                  })
+                  const aiData2 = await aiRes2.json()
+                  if (aiData2?.reply) {
+                    const aiMsg2: DiscordMessage = {
+                      id: `ai-${Date.now()}`,
+                      channelId: activeChannel.id,
+                      senderId: "kikar-bot",
+                      senderName: "Kikar AI ✦",
+                      role: "bot",
+                      badge: "BOT",
+                      content: aiData2.reply,
+                      created_at: new Date().toISOString(),
+                    }
+
+                    setChannelMessages((prev) => {
+                      const updated = {
+                        ...prev,
+                        [activeChannel.id]: [...(prev[activeChannel.id] || []), aiMsg2],
+                      }
+                      localStorage.setItem("kikar_discord_messages", JSON.stringify(updated))
+                      return updated
+                    })
+
+                    if (realtimeChannelRef.current) {
+                      realtimeChannelRef.current.send({
+                        type: "broadcast",
+                        event: "new-channel-msg",
+                        payload: aiMsg2,
+                      })
+                    }
+                  }
+                } catch (err) {
+                  console.error("AI channel comeback error:", err)
+                } finally {
+                  setTypingUsers((prev) => {
+                    const next = { ...prev }
+                    delete next["kikar-ai-bot"]
+                    return next
+                  })
+                }
+              }, 1200)
+
+            } catch (err) {
+              console.error("Replica channel reply error:", err)
+            } finally {
+              setTypingUsers((prev) => {
+                const next = { ...prev }
+                delete next[`replica-${targetReplica.id}`]
+                return next
+              })
+            }
+          }, 1100)
+
+        } catch (err) {
+          console.error("AI channel reply error", err)
+        } finally {
+          setTypingUsers((prev) => {
+            const next = { ...prev }
+            delete next["kikar-ai-bot"]
+            return next
+          })
+        }
+      }, 900)
+
+    } else if (targetProfile && targetReplica && !isAiSummon) {
+      // ── SCENARIO B: Direct Replica Interception in Channel ───────────
+      const replicaDisplayName = `${targetProfile.display_name || targetProfile.username}'s Replica 🪞`
+
+      setTypingUsers((prev) => ({
+        ...prev,
+        [`replica-${targetReplica.id}`]: { name: replicaDisplayName, expires: Date.now() + 3500 },
+      }))
+
+      setTimeout(async () => {
+        try {
+          const recentHistory = (channelMessages[activeChannel.id] || []).slice(-5).map((m) => ({
+            role: m.role === "bot" || m.role === "replica" ? "assistant" : "user",
+            content: `${m.senderName}: ${m.content}`,
+          }))
+
+          const res = await fetch("/api/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              messages: [
+                ...recentHistory,
+                { role: "user", content: `${myName} mentioned you in #${activeChannel.name}: "${content}"` },
+              ],
+              systemPrompt: `You are ${targetProfile.display_name || targetProfile.username}'s Digital Replica 🪞 in a Discord server channel #${activeChannel.name}.
+Your human creator is currently offline or away.
+Your persona instructions: "${targetReplica.personality || targetReplica.description || 'Be casual, friendly, witty, and match their style'}".
+Acknowledge in character that you're their digital twin holding down the fort while they're away. Keep your response to 1-3 conversational sentences.`,
+              maxTokens: 250,
+              userId: session?.user?.id,
+            }),
+          })
+          const data = await res.json()
+          const replicaReply: DiscordMessage = {
+            id: `replica-${Date.now()}`,
+            channelId: activeChannel.id,
+            senderId: `replica-${targetReplica.id}`,
+            senderName: replicaDisplayName,
+            senderAvatar: targetProfile.avatar_url || targetReplica.avatar_url,
+            role: "replica",
+            badge: "REPLICA",
+            content: data?.reply || `Hey ${myName}! ${targetProfile.display_name || targetProfile.username} is offline right now, but I'm their replica! What's up?`,
+            created_at: new Date().toISOString(),
+          }
+
+          setChannelMessages((prev) => {
+            const updated = {
+              ...prev,
+              [activeChannel.id]: [...(prev[activeChannel.id] || []), replicaReply],
+            }
+            localStorage.setItem("kikar_discord_messages", JSON.stringify(updated))
+            return updated
+          })
+
+          if (realtimeChannelRef.current) {
+            realtimeChannelRef.current.send({
+              type: "broadcast",
+              event: "new-channel-msg",
+              payload: replicaReply,
+            })
+          }
+        } catch (err) {
+          console.error("Replica auto-interception error:", err)
+        } finally {
+          setTypingUsers((prev) => {
+            const next = { ...prev }
+            delete next[`replica-${targetReplica.id}`]
+            return next
+          })
+        }
+      }, 1200)
+
+    } else if (isAiSummon) {
+      // ── SCENARIO C: Standard AI Channel Participation ───────────────
       setTypingUsers((prev) => ({
         ...prev,
         "kikar-ai-bot": { name: "Kikar AI ✦", expires: Date.now() + 4000 },
