@@ -541,8 +541,9 @@ export default function DiscordView({
       )
     }
 
-    const isCrossConvoRequest = isAiSummon && Boolean(targetReplica || /replica|twin/i.test(content)) &&
-      /\b(talk|converse|chat|speak|say hi|ask|debate|roast|interact|introduce)\b/i.test(content)
+    const hasTarget = Boolean(targetReplica || /replica|twin/i.test(content) || targetProfile)
+    const isContinuation = /continue|keep|more|again|talk|go on|what else/i.test(content)
+    const isCrossConvoRequest = isAiSummon && (hasTarget || isContinuation)
 
     if (isCrossConvoRequest && targetReplica) {
       // ── SCENARIO A: Real-Time Multi-Agent Channel Convo (Kikar AI & Replica) ──

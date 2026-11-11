@@ -164,17 +164,26 @@ export default function DMWindow({
   }
 
   async function triggerSmartDMResponse(userMessageText: string, recentMessages: any[]) {
-    const isAiSummon = /^@(ai|kikar)\b/i.test(userMessageText.trim())
+    const isAiSummon = /@(ai|kikar)\b/i.test(userMessageText) || /^@(ai|kikar)/i.test(userMessageText.trim())
     const otherName = otherProfile?.display_name || otherProfile?.username || "Friend"
     const myName = session.user.email?.split("@")[0] || "Friend"
+    const cleanLower = userMessageText.toLowerCase()
+    const otherNameLower = otherName.toLowerCase()
 
-    // Check if user specifically asks AI to talk to, interact with, or debate the replica or friend
-    const isCrossConvoRequest = isAiSummon && (
-      /\b(talk|converse|chat|speak|say hi|ask|debate|roast|interact|introduce)\b/i.test(userMessageText) &&
-      (/\b(replica|twin)\b/i.test(userMessageText) || userMessageText.toLowerCase().includes(otherName.toLowerCase()))
-    )
+    // 1. Mentions the replica or the other user
+    const mentionsReplica = /replica|twin/i.test(userMessageText)
+    const mentionsOther = cleanLower.includes(`@${otherNameLower}`) ||
+      new RegExp(`\\b${otherNameLower}\\b`, "i").test(cleanLower)
 
-    // Check if user directly addresses replica
+    // 2. Continuation of an ongoing multi-agent conversation
+    const lastFew = recentMessages.slice(-4)
+    const hadRecentReplicaConvo = lastFew.some(m => typeof m.content === "string" && m.content.includes("replica:"))
+    const isContinuation = hadRecentReplicaConvo && /continue|keep|more|again|talk|go on|what else/i.test(cleanLower)
+
+    // Check if user asks AI to talk to, interact with, or mention the replica or friend
+    const isCrossConvoRequest = isAiSummon && (mentionsReplica || mentionsOther || isContinuation)
+
+    // Check if user directly addresses replica without @ai
     const isReplicaDirectSummon =
       /^\s*@(replica|twin)\b/i.test(userMessageText) ||
       new RegExp(`^@${otherName}\\b`, "i").test(userMessageText.trim()) ||
@@ -182,7 +191,7 @@ export default function DMWindow({
 
     const isRecipientOffline = !otherProfile?.is_online && autoReplicaMode
 
-    if (!isAiSummon && !isReplicaDirectSummon && !isRecipientOffline) return
+    if (!isAiSummon && !isReplicaDirectSummon && !isRecipientOffline && !isCrossConvoRequest) return
 
     // Helper to retrieve the other user's replica prompt or past voice
     async function getReplicaSystemPrompt() {
@@ -231,11 +240,11 @@ export default function DMWindow({
           body: JSON.stringify({
             messages: [...formattedHistory, { role: "user", content: cleanUserPrompt }],
             systemPrompt: `You are Kikar AI Co-Pilot in a direct message between ${myName} and ${otherName}.
-${myName} asked you: "${userMessageText}".
-Address ${otherName}'s AI Replica directly (e.g. "Hey ${otherName}'s Replica...").
-Greet them or ask them an engaging, fun question.
-CRITICAL: DO NOT roleplay or simulate ${otherName}'s Replica yourself! ${otherName}'s Replica is an independent AI agent right here in this chat that will respond to you in the next message.
-Keep your response concise (under 45 words) and directly addressing the replica.`,
+${myName} instructed you: "${userMessageText}".
+Follow ${myName}'s prompt instructions (for example, if they asked you to start with "@${otherName}" or address ${otherName}'s Replica, do so!).
+Address ${otherName}'s AI Replica or @${otherName} directly.
+CRITICAL: DO NOT roleplay or simulate ${otherName}'s Replica or ${otherName} yourself! ${otherName}'s Replica is an independent AI agent right here in this chat that will respond to you in the next message.
+Keep your response concise (under 45 words).`,
             userId: session.user.id,
             chatId: `dm_${activeConvo.id}`,
           }),
@@ -260,7 +269,7 @@ Keep your response concise (under 45 words) and directly addressing the replica.
               { role: "user", content: `Reply directly to Kikar AI Co-Pilot's message: "${aiMsg1}"` },
             ],
             systemPrompt: `${replicaPrompt}
-Kikar AI Co-Pilot just said directly to you: "${aiMsg1}".
+Kikar AI Co-Pilot just said directly to you or @${otherName}: "${aiMsg1}".
 Respond directly to Kikar AI Co-Pilot as ${otherName}'s Replica.
 Be playful, witty, and stay completely in character.
 Keep your reply punchy and under 40 words.`,
