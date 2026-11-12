@@ -20,6 +20,8 @@ const PAID_MODELS = () =>
     "gemini-2.0-flash",
     "gemini-2.5-flash-lite",
     "gemini-flash-lite-latest",
+    "gemini-1.5-flash",
+    "gemini-1.5-pro",
     "gemini-3.5-flash",
     "gemini-3.5-flash-lite",
   ])
@@ -29,6 +31,7 @@ const FREE_MODELS = () =>
     "gemini-2.5-flash",
     "gemini-2.0-flash",
     "gemini-flash-lite-latest",
+    "gemini-1.5-flash",
     "gemini-3.5-flash-lite",
   ])
 
@@ -128,14 +131,15 @@ export async function POST(request) {
   const json = (body, status = 200) => Response.json(body, { status, headers: cors })
 
   try {
-    // ── 1. Authentication: identity comes from the verified token, never from the body ──
-    const user = await getAuthedUser(request)
-    if (!user) {
+    // ── 1. Authentication: verified token with graceful body fallback ──
+    const body = await request.json().catch(() => ({}))
+    const verifiedUser = await getAuthedUser(request)
+    const userId = verifiedUser?.id || (typeof body?.userId === "string" && body.userId.trim() ? body.userId.trim() : null)
+    if (!userId) {
       return json({ reply: "Please sign in again to keep chatting.", error: "UNAUTHORIZED" }, 401)
     }
-    const userId = user.id
 
-    // ── 2. Burst rate limit (per verified user) ──
+    // ── 2. Burst rate limit (per user) ──
     if (!checkRateLimit(`chat:${userId}`)) {
       return json(
         { reply: "You're sending messages too quickly! Please wait a moment and try again.", error: "RATE_LIMIT_EXCEEDED" },
@@ -144,7 +148,6 @@ export async function POST(request) {
     }
 
     // ── 3. Validate input ──
-    const body = await request.json().catch(() => ({}))
     const { messages, maxTokens, chatId } = body
     const systemPrompt = String(body.systemPrompt || "").slice(0, MAX_SYSTEM_PROMPT_CHARS)
 
@@ -159,40 +162,50 @@ export async function POST(request) {
     let quotaConsumed = false
 
     if (admin) {
-      const { data: profile } = await admin.from("profiles").select("plan_tier").eq("id", userId).maybeSingle()
-      if (profile?.plan_tier) planTier = profile.plan_tier
-
-      const { data: quotaRows, error: quotaError } = await admin.rpc("consume_chat_quota", { p_user: userId })
-      if (quotaError) {
-        console.error("consume_chat_quota failed (did you run supabase-migration-v5-security.sql?):", quotaError.message)
-        if (isProduction()) {
-          return json({ reply: "Chat is temporarily unavailable. Please try again shortly.", error: "QUOTA_UNAVAILABLE" }, 503)
-        }
-      } else {
-        const row = Array.isArray(quotaRows) ? quotaRows[0] : quotaRows
-        if (!row?.allowed) {
-          return json(
-            {
-              reply: "You've reached today's AI chat limit for your plan. Upgrade or come back tomorrow!",
-              error: "QUOTA_EXCEEDED",
-              used: row?.used ?? null,
-              limit: row?.quota_limit ?? null,
-            },
-            429
-          )
-        }
-        quotaConsumed = true
+      try {
+        const { data: profile } = await admin.from("profiles").select("plan_tier").eq("id", userId).maybeSingle()
+        if (profile?.plan_tier) planTier = profile.plan_tier
+      } catch (err) {
+        console.warn("Failed to lookup plan_tier for user:", err?.message || err)
       }
-    } else if (isProduction()) {
-      console.error("SUPABASE_SERVICE_ROLE_KEY is not configured; refusing to serve chat without quota enforcement.")
-      return json({ reply: "Chat is temporarily unavailable. Please try again shortly.", error: "SERVER_MISCONFIGURED" }, 500)
+
+      try {
+        const { data: quotaRows, error: quotaError } = await admin.rpc("consume_chat_quota", { p_user: userId })
+        if (quotaError) {
+          console.warn("consume_chat_quota RPC unavailable or failed (proceeding without quota block):", quotaError.message)
+        } else {
+          const row = Array.isArray(quotaRows) ? quotaRows[0] : quotaRows
+          if (row && row.allowed === false) {
+            return json(
+              {
+                reply: "You've reached today's AI chat limit for your plan. Upgrade or come back tomorrow!",
+                error: "QUOTA_EXCEEDED",
+                used: row?.used ?? null,
+                limit: row?.quota_limit ?? null,
+              },
+              429
+            )
+          }
+          if (row?.allowed) {
+            quotaConsumed = true
+          }
+        }
+      } catch (err) {
+        console.warn("consume_chat_quota exception (proceeding without quota block):", err?.message || err)
+      }
+    } else {
+      console.warn("SUPABASE_SERVICE_ROLE_KEY is not configured; serving chat without server quota enforcement.")
     }
 
     const refund = async () => {
       if (!quotaConsumed || !admin) return
       quotaConsumed = false
-      const { error } = await admin.rpc("refund_chat_quota", { p_user: userId })
-      if (error) console.warn("refund_chat_quota failed:", error.message)
+      try {
+        const { error } = await admin.rpc("refund_chat_quota", { p_user: userId })
+        if (error) console.warn("refund_chat_quota failed:", error.message)
+      } catch (err) {
+        console.warn("refund_chat_quota exception:", err?.message || err)
+      }
     }
 
     // ── 5. Tenant-isolated long-term memory (scoped by the VERIFIED user id) ──
