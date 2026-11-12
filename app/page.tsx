@@ -350,6 +350,15 @@ export default function Home() {
 
   // ── Navigation ────────────────────────────────────────────────
   function openChar(c: any) {
+    if (c && c.id) {
+      setCharacters(prev => {
+        const exists = prev.some(item => item.id === c.id)
+        if (exists) {
+          return prev.map(item => item.id === c.id ? c : item)
+        }
+        return [c, ...prev]
+      })
+    }
     setActiveChar(c); setShowForm(false); setEditingChar(null); setActiveConvo(null)
     setShowProfile(false); setChatOpen(true)
   }

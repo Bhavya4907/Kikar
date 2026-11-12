@@ -19,6 +19,7 @@ interface Props {
   onOpenPricing?: () => void
   onCreateChannel?: (serverId: string) => void
   onOpenCreateDM?: () => void
+  onOpenCreatePersona?: () => void
   voiceConnected?: boolean
   onToggleVoice?: () => void
 }
@@ -39,6 +40,7 @@ export default function ChannelSidebar({
   onOpenPricing,
   onCreateChannel,
   onOpenCreateDM,
+  onOpenCreatePersona,
   voiceConnected = false,
   onToggleVoice,
 }: Props) {
@@ -410,6 +412,16 @@ export default function ChannelSidebar({
               }}
             >
               <span>🤖 AI Bot Arenas</span>
+              {onOpenCreatePersona && (
+                <button
+                  type="button"
+                  onClick={onOpenCreatePersona}
+                  title="Create New AI Persona"
+                  style={{ background: "transparent", border: "none", color: "#949ba4", cursor: "pointer", fontSize: 13 }}
+                >
+                  +
+                </button>
+              )}
             </div>
 
             {activeServer.channels
@@ -511,28 +523,55 @@ export default function ChannelSidebar({
                 <span style={{ flex: 1 }}>Radar Matchmaker</span>
               </button>
 
-              <button
-                type="button"
-                onClick={() => onSelectHomeSubView("personas")}
-                style={{
-                  width: "100%",
-                  padding: "8px 10px",
-                  borderRadius: 6,
-                  border: "none",
-                  background: homeSubView === "personas" && !activeConvo ? "hsla(119, 99%, 46%, 0.15)" : "transparent",
-                  color: homeSubView === "personas" && !activeConvo ? T.primary : "#949ba4",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 12,
-                  fontSize: 14,
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  textAlign: "left",
-                }}
-              >
-                <span style={{ fontSize: 16 }}>🤖</span>
-                <span style={{ flex: 1 }}>AI Persona Gallery</span>
-              </button>
+              <div style={{ display: "flex", alignItems: "center", width: "100%", gap: 4 }}>
+                <button
+                  type="button"
+                  onClick={() => onSelectHomeSubView("personas")}
+                  style={{
+                    flex: 1,
+                    padding: "8px 10px",
+                    borderRadius: 6,
+                    border: "none",
+                    background: homeSubView === "personas" && !activeConvo ? "hsla(119, 99%, 46%, 0.15)" : "transparent",
+                    color: homeSubView === "personas" && !activeConvo ? T.primary : "#949ba4",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 12,
+                    fontSize: 14,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    textAlign: "left",
+                  }}
+                >
+                  <span style={{ fontSize: 16 }}>🤖</span>
+                  <span style={{ flex: 1 }}>AI Persona Gallery</span>
+                </button>
+                {onOpenCreatePersona && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onOpenCreatePersona()
+                    }}
+                    title="Create AI Persona"
+                    style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: 6,
+                      background: "rgba(255, 255, 255, 0.06)",
+                      border: "none",
+                      color: "#949ba4",
+                      fontSize: 14,
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    +
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Direct Messages Header */}

@@ -48,6 +48,9 @@ export default function CharacterForm({ session, initialChar, onCreated, onUpdat
   useEffect(() => {
     if (initialChar) {
       let prompt = initialChar.system_prompt || ""
+      const catMatch = prompt.match(/^\[Category:\s*(.*?)\]\s*/i)
+      const category = catMatch ? catMatch[1] : (initialChar.category || "general")
+      prompt = prompt.replace(/^\[Category:\s*.*?\]\s*/i, "")
       prompt = prompt.replace(new RegExp(`^You are ${initialChar.name}\\.\\s*`, "i"), "")
       const styleMatch = prompt.match(/Speaking style:\s*(.*?)\.\s*(?:Vibe tuning:|Keep replies)/i)
       const speakingStyle = styleMatch ? styleMatch[1] : ""
@@ -61,10 +64,19 @@ export default function CharacterForm({ session, initialChar, onCreated, onUpdat
       setNewChar({
         name: initialChar.name || "",
         emoji: initialChar.emoji || "🤖",
-        category: initialChar.category || "general",
+        category,
         personality: personality || prompt,
         speakingStyle: speakingStyle,
         is_public: !!initialChar.is_public,
+      })
+    } else {
+      setNewChar({
+        name: "",
+        emoji: "🤖",
+        category: "general",
+        personality: "",
+        speakingStyle: "",
+        is_public: false,
       })
     }
   }, [initialChar])
@@ -100,47 +112,77 @@ export default function CharacterForm({ session, initialChar, onCreated, onUpdat
   }
 
   async function handleSave() {
-    if (!newChar.name.trim() || !newChar.personality.trim() || !session) return
-    setSaving(true)
-    const vibeDirective = buildVibeDirective()
-    const system_prompt = `You are ${newChar.name}. ${newChar.personality}.${
-      newChar.speakingStyle ? " Speaking style: " + newChar.speakingStyle + "." : ""
-    } ${vibeDirective}`
-
-    if (initialChar) {
-      const { data, error } = await supabase
-        .from("characters")
-        .update({
-          name: newChar.name,
-          emoji: newChar.emoji,
-          category: newChar.category,
-          system_prompt,
-          is_public: newChar.is_public,
-        })
-        .eq("id", initialChar.id)
-        .select()
-        .single()
-
-      if (!error && data && onUpdated) {
-        onUpdated(data)
-      }
-    } else {
-      const { data, error } = await supabase
-        .from("characters")
-        .insert({
-          name: newChar.name,
-          emoji: newChar.emoji,
-          category: newChar.category,
-          system_prompt,
-          created_by: session.user.id,
-          is_public: newChar.is_public,
-        })
-        .select()
-        .single()
-      if (!error && data) onCreated(data)
+    if (!newChar.name.trim()) {
+      alert("Please provide a name for your persona.")
+      return
+    }
+    if (!newChar.personality.trim()) {
+      alert("Please describe your persona's personality or backstory.")
+      return
+    }
+    if (!session?.user?.id) {
+      alert("Please sign in to create or edit an AI persona.")
+      return
     }
 
-    setSaving(false)
+    setSaving(true)
+    try {
+      const vibeDirective = buildVibeDirective()
+      const system_prompt = `[Category: ${newChar.category}] You are ${newChar.name.trim()}. ${newChar.personality.trim()}.${
+        newChar.speakingStyle.trim() ? " Speaking style: " + newChar.speakingStyle.trim() + "." : ""
+      } ${vibeDirective}`
+
+      const payload: any = {
+        name: newChar.name.trim(),
+        emoji: newChar.emoji || "🤖",
+        system_prompt,
+        is_public: !!newChar.is_public,
+      }
+
+      if (initialChar) {
+        const { data, error } = await supabase
+          .from("characters")
+          .update(payload)
+          .eq("id", initialChar.id)
+          .select()
+          .single()
+
+        if (error) {
+          console.error("Update character error:", error)
+          alert(`Failed to update character: ${error.message}`)
+          return
+        }
+
+        if (data && onUpdated) {
+          onUpdated(data)
+        } else if (data) {
+          onCreated(data)
+        }
+      } else {
+        payload.created_by = session.user.id
+
+        const { data, error } = await supabase
+          .from("characters")
+          .insert(payload)
+          .select()
+          .single()
+
+        if (error) {
+          console.error("Insert character error:", error)
+          alert(`Failed to create character: ${error.message}`)
+          return
+        }
+
+        if (data) {
+          onCreated(data)
+        }
+      }
+    } catch (err: any) {
+      console.error("Character save unexpected error:", err)
+      alert(`An error occurred: ${err?.message || err}`)
+    } finally {
+      setSaving(false)
+    }
   }
 
   const isEditing = !!initialChar

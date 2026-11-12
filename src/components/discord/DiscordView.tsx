@@ -378,6 +378,17 @@ export default function DiscordView({
 
   function handleSelectHomeSubView(view: "fellows" | "radar" | "personas") {
     setHomeSubView(view)
+    setShowCharForm(false)
+    setEditingChar(null)
+    onCloseActive()
+    setMobileDrawerOpen(false)
+  }
+
+  function handleOpenCreatePersona() {
+    setActiveServerId(null)
+    setHomeSubView("personas")
+    setEditingChar(null)
+    setShowCharForm(true)
     onCloseActive()
     setMobileDrawerOpen(false)
   }
@@ -1090,6 +1101,7 @@ Keep your answer concise, engaging, and formatting-rich (markdown, emojis). Avoi
         onOpenProfile={onOpenProfile}
         onOpenPricing={onOpenPricing}
         onCreateChannel={handleCreateChannel}
+        onOpenCreatePersona={handleOpenCreatePersona}
         onOpenCreateDM={() => {
           setActiveServerId(null)
           setHomeSubView("fellows")
@@ -1164,9 +1176,18 @@ Keep your answer concise, engaging, and formatting-rich (markdown, emojis). Avoi
             initialChar={editingChar}
             onCreated={(c) => {
               setShowCharForm(false)
+              setEditingChar(null)
               onOpenChar(c)
             }}
-            onCancel={() => setShowCharForm(false)}
+            onUpdated={(c) => {
+              setShowCharForm(false)
+              setEditingChar(null)
+              onOpenChar(c)
+            }}
+            onCancel={() => {
+              setShowCharForm(false)
+              setEditingChar(null)
+            }}
           />
         ) : homeSubView === "radar" ? (
           /* Radar Matchmaker */
@@ -1186,7 +1207,10 @@ Keep your answer concise, engaging, and formatting-rich (markdown, emojis). Avoi
             charsLoading={charsLoading}
             session={session}
             onOpenChar={onOpenChar}
-            onOpenForm={() => setShowCharForm(true)}
+            onOpenForm={() => {
+              setEditingChar(null)
+              setShowCharForm(true)
+            }}
             onEditChar={(c) => {
               setEditingChar(c)
               setShowCharForm(true)
