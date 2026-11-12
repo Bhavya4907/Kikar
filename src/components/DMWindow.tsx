@@ -39,12 +39,14 @@ export default function DMWindow({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const channelRef = useRef<any>(null)
 
-  const other = activeConvo.user1_id === session.user.id
-    ? activeConvo.user2
-    : activeConvo.user1
-  const otherProfile = allProfiles.find((p: any) => p.id === other?.id) || other
-  const otherName = otherProfile?.display_name || otherProfile?.username || "Friend"
-  const myName = session.user.email?.split("@")[0] || "Friend"
+  const otherId: string = (activeConvo?.user1_id === session?.user?.id
+    ? activeConvo?.user2_id
+    : activeConvo?.user1_id) || activeConvo?.user2?.id || activeConvo?.user1?.id || ""
+
+  const otherProfile = (allProfiles || []).find((p: any) => p.id === otherId) || (activeConvo?.user1_id === session?.user?.id ? activeConvo?.user2 : activeConvo?.user1) || {}
+  const other = otherProfile
+  const otherName = otherProfile?.display_name || otherProfile?.username || (otherId ? `User_${otherId.slice(0, 4)}` : "Friend")
+  const myName = session?.user?.email?.split("@")[0] || "Friend"
 
   // Helper to merge messages without duplicates
   function mergeMessages(incoming: any[]) {
@@ -282,21 +284,32 @@ export default function DMWindow({
 
     // Helper to retrieve the other user's replica prompt or past voice
     async function getReplicaSystemPrompt() {
-      const { data: replicaChar } = await supabase
-        .from("characters")
-        .select("*")
-        .or(`replica_of.eq.${other.id},name.ilike.%${otherName}%`)
-        .eq("is_replica", true)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle()
+      try {
+        let query = supabase
+          .from("characters")
+          .select("*")
+          .eq("is_replica", true)
 
-      if (replicaChar?.system_prompt) {
-        return `${replicaChar.system_prompt}\nYou are ${otherName}'s Digital Twin Replica in this direct chat. Never break character. Match their style, slang, and personality.`
+        if (otherId) {
+          query = query.or(`replica_of.eq.${otherId},name.ilike.%${otherName}%`)
+        } else {
+          query = query.ilike("name", `%${otherName}%`)
+        }
+
+        const { data: replicaChar } = await query
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        if (replicaChar?.system_prompt) {
+          return `${replicaChar.system_prompt}\nYou are ${otherName}'s Digital Twin Replica in this direct chat. Never break character. Match their style, slang, and personality.`
+        }
+      } catch (e) {
+        console.warn("Error fetching replicaChar:", e)
       }
 
       const pastSamples = recentMessages
-        .filter(m => m.sender_id === other.id && !m.content?.startsWith("[image]:"))
+        .filter(m => (m.sender_id === otherId || (m.sender_id !== session?.user?.id && !m.content?.startsWith("[replica:"))) && !m.content?.startsWith("[image]:") && !m.content?.startsWith("[bot:"))
         .slice(-15)
         .map(m => m.content)
         .join("\n")
@@ -646,18 +659,18 @@ Do NOT impersonate ${otherName} or their replica.`,
 
   async function createReplica() {
     setShowMobileMenu(false)
-    if (!session || !other) return
+    if (!session || !otherId) return
     setCreating(true)
     const { data: msgs } = await supabase
       .from("direct_messages")
       .select("content")
       .eq("conversation_id", activeConvo.id)
-      .eq("sender_id", other.id)
+      .eq("sender_id", otherId)
       .order("created_at", { ascending: true })
       .limit(200)
 
     if (!msgs || msgs.length < 5) {
-      alert(`${other.username || "This user"} needs to send at least 5 messages first!`)
+      alert(`${otherName || "This user"} needs to send at least 5 messages first!`)
       setCreating(false)
       return
     }
@@ -678,17 +691,17 @@ Do NOT impersonate ${otherName} or their replica.`,
 
     await supabase.from("characters")
       .delete()
-      .eq("replica_of", other.id)
+      .eq("replica_of", otherId)
       .eq("created_by", session.user.id)
 
     const { data: char, error } = await supabase.from("characters")
       .insert({
-        name: `${other.display_name || other.username}'s Replica`,
+        name: `${otherName}'s Replica`,
         emoji: "🪞",
         system_prompt,
         created_by: session.user.id,
         is_replica: true,
-        replica_of: other.id,
+        replica_of: otherId,
         is_public: false,
       })
       .select().single()
