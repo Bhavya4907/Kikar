@@ -1,5 +1,6 @@
 "use client"
 import { T } from "../styles"
+import { Icon, type IconName } from "./Icons"
 import type { PlanTier } from "../lib/types"
 
 interface Props {
@@ -36,34 +37,34 @@ export default function MobileBottomNav({
   const tabs: Array<{
     id: "ai" | "people" | "radar" | "me"
     label: string
-    icon: string
+    icon: IconName | "avatar"
     activeColor: string
     badge?: number
   }> = [
     {
       id: "ai",
       label: "Personas",
-      icon: "✦",
-      activeColor: "hsl(119,99%,46%)",
+      icon: "spark",
+      activeColor: "hsl(226,72%,70%)",
     },
     {
       id: "people",
       label: "Fellows",
-      icon: "👥",
-      activeColor: "#c084fc",
+      icon: "users",
+      activeColor: "#b3a8f8",
       badge: onlineCount,
     },
     {
       id: "radar",
       label: "Radar",
-      icon: "⚡",
-      activeColor: "#38bdf8",
+      icon: "radar",
+      activeColor: "#62b5d9",
     },
     {
       id: "me",
       label: "Profile",
-      icon: profile?.avatar_url ? "avatar" : "👤",
-      activeColor: "#ffffff",
+      icon: profile?.avatar_url ? "avatar" : "user",
+      activeColor: "#f4f5f7",
     },
   ]
 
@@ -91,9 +92,7 @@ export default function MobileBottomNav({
         zIndex: 90,
         height: "calc(60px + env(safe-area-inset-bottom, 8px))",
         paddingBottom: "env(safe-area-inset-bottom, 8px)",
-        background: "rgba(16, 16, 18, 0.94)",
-        backdropFilter: "blur(20px)",
-        WebkitBackdropFilter: "blur(20px)",
+        background: "rgb(16, 16, 18)",
         borderTop: "1px solid rgba(255, 255, 255, 0.08)",
         display: "flex",
         alignItems: "center",
@@ -159,7 +158,7 @@ export default function MobileBottomNav({
                 fontSize: tab.id === "ai" ? 17 : 16,
                 background: isActive ? `${tab.activeColor}22` : "transparent",
                 color: isActive ? tab.activeColor : T.muted,
-                transition: "all 0.18s ease",
+                transition: "background-color 0.18s, border-color 0.18s, color 0.18s, opacity 0.18s, box-shadow 0.18s, transform 0.18s ease",
               }}
             >
               {tab.icon === "avatar" && profile?.avatar_url ? (
@@ -175,7 +174,7 @@ export default function MobileBottomNav({
                   }}
                 />
               ) : (
-                tab.icon
+                <Icon name={tab.icon as IconName} size={tab.id === "ai" ? 19 : 18} />
               )}
 
               {/* Online fellows green pulse badge */}
@@ -188,8 +187,8 @@ export default function MobileBottomNav({
                     width: 7,
                     height: 7,
                     borderRadius: "50%",
-                    background: "#22c55e",
-                    boxShadow: "0 0 8px #22c55e",
+                    background: "#4fb987",
+                    boxShadow: "0 0 8px #4fb987",
                   }}
                 />
               )}

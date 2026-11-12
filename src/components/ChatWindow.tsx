@@ -1,9 +1,11 @@
 "use client"
 import { useEffect, useRef, useState } from "react"
+import { apiFetch } from "../lib/apiFetch"
 import { supabase } from "../lib/supabase"
 import { T } from "../styles"
 import { showNotification, speakMessageText, stopSpeakingText } from "../lib/helpers"
 import type { PlanTier, UsageQuota } from "../lib/types"
+import { Icon } from "./Icons"
 
 interface Props {
   session: any
@@ -79,7 +81,7 @@ export default function ChatWindow({
         .select()
         .maybeSingle()
 
-      const res = await fetch("/api/chat", {
+      const res = await apiFetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -140,7 +142,7 @@ export default function ChatWindow({
     const promptText = input.trim()
     setInput("")
     try {
-      const res = await fetch("/api/generate-image", {
+      const res = await apiFetch("/api/generate-image", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt: promptText, userId: session.user.id }),
@@ -241,7 +243,7 @@ export default function ChatWindow({
     }
 
     const sampleMessages = msgs.map((m: any) => m.content).join("\n")
-    const res = await fetch("/api/chat", {
+    const res = await apiFetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -326,8 +328,8 @@ export default function ChatWindow({
           width: 38,
           height: 38,
           borderRadius: 10,
-          background: "hsla(119,99%,46%,0.12)",
-          border: "1px solid hsla(119,99%,46%,0.25)",
+          background: "hsla(226,72%,70%,0.12)",
+          border: "1px solid hsla(226,72%,70%,0.25)",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -341,14 +343,14 @@ export default function ChatWindow({
           </div>
           <div style={{ fontSize: 11, color: T.muted, display: "flex", alignItems: "center", gap: 5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {isReplica ? (
-              <span style={{ color: "#a855f7", fontWeight: 600 }}>🪞 Replica</span>
+              <span style={{ color: "#8b7cf6", fontWeight: 600 }}>Replica</span>
             ) : isOwner ? (
-              <span style={{ color: T.primary }}>✦ Custom Bot</span>
+              <span style={{ color: T.primary }}>Custom Bot</span>
             ) : (
-              <span>✦ AI Persona</span>
+              <span>AI Persona</span>
             )}
             <span>·</span>
-            <span style={{ color: "#38bdf8", fontWeight: 600 }}>🧠 Memory</span>
+            <span style={{ color: "#62b5d9", fontWeight: 600 }}>Memory</span>
           </div>
         </div>
 
@@ -360,7 +362,7 @@ export default function ChatWindow({
               onClick={onOpenPricing}
               title="View plan and remaining daily credits"
               style={{
-                background: planTier === "free" ? "rgba(255,255,255,0.05)" : "hsla(119,99%,46%,0.14)",
+                background: planTier === "free" ? "rgba(255,255,255,0.05)" : "hsla(226,72%,70%,0.14)",
                 border: planTier === "free" ? `1px solid ${T.border}` : `1px solid ${T.primary}`,
                 borderRadius: 8,
                 color: planTier === "free" ? T.text : T.primary,
@@ -372,7 +374,7 @@ export default function ChatWindow({
                 whiteSpace: "nowrap",
               }}
             >
-              ⚡ {planTier.toUpperCase()}
+              {planTier.toUpperCase()}
             </button>
           )}
 
@@ -384,7 +386,7 @@ export default function ChatWindow({
               width: 34,
               height: 34,
               borderRadius: 8,
-              background: showMobileMenu ? "hsla(119,99%,46%,0.15)" : T.bgAlt,
+              background: showMobileMenu ? "hsla(226,72%,70%,0.15)" : T.bgAlt,
               border: `1px solid ${showMobileMenu ? T.primary : T.border}`,
               color: T.text,
               fontSize: 16,
@@ -434,7 +436,7 @@ export default function ChatWindow({
               opacity: messages.length === 0 ? 0.5 : 1,
             }}
           >
-            ✨ Start Fresh Chat
+            Start Fresh Chat
           </button>
 
           <button
@@ -446,7 +448,7 @@ export default function ChatWindow({
               background: "transparent",
               border: "none",
               borderRadius: 8,
-              color: "#c084fc",
+              color: "#b3a8f8",
               fontSize: 12,
               fontWeight: 600,
               textAlign: "left",
@@ -454,7 +456,7 @@ export default function ChatWindow({
               fontFamily: T.font,
             }}
           >
-            🪞 {creating ? "Creating Replica…" : "Train My Digital Replica"}
+            {creating ? "Creating Replica…" : "Train My Digital Replica"}
           </button>
 
           {isOwner && !isReplica && onEditChar && (
@@ -474,7 +476,7 @@ export default function ChatWindow({
                 fontFamily: T.font,
               }}
             >
-              ✏️ Edit Character &amp; Vibe
+              Edit Character &amp; Vibe
             </button>
           )}
 
@@ -494,7 +496,7 @@ export default function ChatWindow({
               fontFamily: T.font,
             }}
           >
-            🚩 Report AI Character
+            Report AI Character
           </button>
 
           {(isOwner || isReplica) && (
@@ -514,7 +516,7 @@ export default function ChatWindow({
                 fontFamily: T.font,
               }}
             >
-              🗑️ Delete Character
+              Delete Character
             </button>
           )}
         </div>
@@ -537,12 +539,12 @@ export default function ChatWindow({
         }}>
           {reportSubmitted ? (
             <span style={{ fontSize: 12, color: T.primary, fontWeight: 600 }}>
-              ✓ Thank you. Your safety report has been logged for review.
+              Thank you. Your safety report has been logged for review.
             </span>
           ) : (
             <>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 200 }}>
-                <span style={{ fontSize: 12, fontWeight: 600, color: T.red }}>🚩 Report:</span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: T.red }}>Report:</span>
                 <select
                   value={reportReason}
                   onChange={e => setReportReason(e.target.value)}
@@ -609,7 +611,7 @@ export default function ChatWindow({
           padding: "6px 12px",
           margin: "8px 12px 0",
           fontSize: 11,
-          color: "#7dd3fc",
+          color: "#9bcfe6",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
@@ -617,7 +619,7 @@ export default function ChatWindow({
           flexShrink: 0,
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, overflow: "hidden" }}>
-            <span>🧠</span>
+            <span><Icon name="database" /></span>
             <span style={{ fontWeight: 600, flexShrink: 0 }}>Memory:</span>
             <span style={{ opacity: 0.9, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {recalledMemories[0]}
@@ -628,7 +630,7 @@ export default function ChatWindow({
             style={{
               background: "transparent",
               border: "none",
-              color: "#7dd3fc",
+              color: "#9bcfe6",
               cursor: "pointer",
               fontSize: 14,
               lineHeight: 1,
@@ -670,11 +672,11 @@ export default function ChatWindow({
               width: 68,
               height: 68,
               borderRadius: 20,
-              background: "hsla(119,99%,46%,0.08)",
+              background: "hsla(226,72%,70%,0.08)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              border: "1px solid hsla(119,99%,46%,0.2)",
+              border: "1px solid hsla(226,72%,70%,0.2)",
             }}>{activeChar.emoji}</div>
             <div>
               <div style={{ fontWeight: 700, color: T.text, marginBottom: 4, fontSize: 16 }}>
@@ -687,7 +689,7 @@ export default function ChatWindow({
               </p>
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center", marginTop: 6 }}>
-              {["👋 Hello!", "Tell me about yourself", "Give me your best advice"].map(preset => (
+              {["Hello!", "Tell me about yourself", "Give me your best advice"].map(preset => (
                 <button
                   key={preset}
                   onClick={() => { setInput(preset) }}
@@ -746,7 +748,7 @@ export default function ChatWindow({
                   background: isImage
                     ? "transparent"
                     : isUser
-                    ? "linear-gradient(135deg, hsl(119,99%,46%) 0%, hsl(119,99%,38%) 100%)"
+                    ? "linear-gradient(135deg, hsl(226,72%,70%) 0%, hsl(226,62%,58%) 100%)"
                     : T.surface,
                   color: isUser ? T.primaryFg : T.text,
                   border: isUser ? "none" : `1px solid ${T.border}`,
@@ -780,7 +782,7 @@ export default function ChatWindow({
                       title="Listen to AI voice note"
                       onClick={() => handleSpeakToggle(m.content, msgId)}
                       style={{
-                        background: speakingMsgId === msgId ? "hsla(119,99%,46%,0.2)" : T.surface,
+                        background: speakingMsgId === msgId ? "hsla(226,72%,70%,0.2)" : T.surface,
                         border: `1px solid ${speakingMsgId === msgId ? T.primary : T.border}`,
                         borderRadius: 6,
                         color: speakingMsgId === msgId ? T.primary : T.muted,
@@ -789,7 +791,7 @@ export default function ChatWindow({
                         padding: "4px 6px",
                       }}
                     >
-                      {speakingMsgId === msgId ? "⏹️" : "🔊"}
+                      {speakingMsgId === msgId ? <Icon name="stop" /> : <Icon name="volume" />}
                     </button>
                   )}
 
@@ -807,7 +809,7 @@ export default function ChatWindow({
                       padding: "4px 6px",
                     }}
                   >
-                    {copiedId === msgId ? "✓" : "📋"}
+                    {copiedId === msgId ? null : <Icon name="copy" />}
                   </button>
 
                   <button
@@ -824,7 +826,7 @@ export default function ChatWindow({
                       padding: "4px 6px",
                     }}
                   >
-                    🗑️
+                    <Icon name="trash" />
                   </button>
                 </div>
               )}
@@ -885,7 +887,7 @@ export default function ChatWindow({
             opacity: !input.trim() || generatingImg ? 0.5 : 1,
           }}
         >
-          {generatingImg ? "⏳" : "🖼️"}
+          {generatingImg ? <Icon name="clock" /> : <Icon name="image" />}
         </button>
 
         <input
@@ -918,7 +920,7 @@ export default function ChatWindow({
             borderRadius: "50%",
             background: loading || !input.trim()
               ? T.surface
-              : "linear-gradient(135deg, hsl(119,99%,46%), hsl(119,99%,38%))",
+              : "linear-gradient(135deg, hsl(226,72%,70%), hsl(226,62%,58%))",
             border: `1px solid ${loading || !input.trim() ? T.border : "transparent"}`,
             fontSize: 16,
             cursor: loading || !input.trim() ? "not-allowed" : "pointer",

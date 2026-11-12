@@ -3,20 +3,17 @@ import { useEffect, useState } from "react"
 import { supabase } from "../src/lib/supabase"
 import { requestNotificationPermission, showNotification } from "../src/lib/helpers"
 import AuthScreen from "../src/components/AuthScreen"
-import Sidebar from "../src/components/Sidebar"
-import ChatWindow from "../src/components/ChatWindow"
-import DMWindow from "../src/components/DMWIndow"
-import CharacterForm from "../src/components/CharacterForm"
 import ProfileForm from "../src/components/ProfileForm"
-import ModeSelection from "../src/components/ModeSelection"
-import AIGridView from "../src/components/AIGridView"
 import PricingModal from "../src/components/PricingModal"
-import PeopleDirectoryView from "../src/components/PeopleDirectoryView"
-import RandomMatchWindow from "../src/components/RandomMatchWindow"
-import MobileBottomNav from "../src/components/MobileBottomNav"
 import DiscordView from "../src/components/discord/DiscordView"
-import { T } from "../src/styles"
 import type { PlanTier, UsageQuota } from "../src/lib/types"
+import { Icon } from "../src/components/Icons"
+
+// Poll results usually come back identical. Setting state with a brand-new (but equal)
+// array still re-renders the whole app, so we skip the update when nothing changed.
+function sameData(a: unknown, b: unknown) {
+  try { return JSON.stringify(a) === JSON.stringify(b) } catch { return false }
+}
 
 export default function Home() {
   const [session,       setSession]       = useState<any>(null)
@@ -28,49 +25,14 @@ export default function Home() {
   const [conversations, setConversations] = useState<any[]>([])
   const [activeConvo,   setActiveConvo]   = useState<any>(null)
   const [allProfiles,   setAllProfiles]   = useState<any[]>([])
-  const [searchEmail,   setSearchEmail]   = useState("")
-  const [searchResult,  setSearchResult]  = useState<any>(null)
-  const [view,          setView]          = useState<"ai"|"people"|"radar">("ai")
-  const [showForm,      setShowForm]      = useState(false)
-  const [editingChar,   setEditingChar]   = useState<any>(null)
   const [showProfile,   setShowProfile]   = useState(false)
   const [profile,       setProfile]       = useState<any>(null)
   const [creating,      setCreating]      = useState(false)
-  const [chatOpen,      setChatOpen]      = useState(false)
-  const [initialModeSelected, setInitialModeSelected] = useState(false)
 
   // Commercialization state: Plan Tier & Daily/Monthly Quotas
   const [planTier, setPlanTier] = useState<PlanTier>("free")
   const [quota, setQuota] = useState<UsageQuota | null>(null)
   const [showPricing, setShowPricing] = useState(false)
-
-  // ── Mode Persistence ─────────────────────────────────────────
-  useEffect(() => {
-    const savedMode = localStorage.getItem("kikar_mode")
-    if (savedMode === "ai" || savedMode === "people" || savedMode === "radar") {
-      setView(savedMode as "ai"|"people"|"radar")
-      setInitialModeSelected(true)
-    }
-  }, [])
-
-  function handleSetView(m: "ai"|"people"|"radar") {
-    setView(m)
-    localStorage.setItem("kikar_mode", m)
-    // On mobile, switching views should return to the main list view of that mode
-    setActiveChar(null)
-    setActiveConvo(null)
-    setShowForm(false)
-    setEditingChar(null)
-    setShowProfile(false)
-    setChatOpen(false)
-  }
-
-  function selectMode(m: "ai"|"people"|"radar") {
-    setView(m)
-    setInitialModeSelected(true)
-    setChatOpen(false)
-    localStorage.setItem("kikar_mode", m)
-  }
 
   // ── Auth ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -114,7 +76,7 @@ export default function Home() {
     setCharsLoading(true)
     supabase.from("characters")
       .select("*")
-      .or(`is_public.eq.true,created_by.eq.${session.user.id}`)
+      .or(`is_public.eq.true,created_by.eq.${session.user.id},is_replica.eq.true`)
       .order("created_at", { ascending: false })
       .then(({ data }) => { setCharacters(data || []); setCharsLoading(false) })
   }, [session])
@@ -142,12 +104,12 @@ export default function Home() {
       if (!data) return
       const ids = [...new Set(data.flatMap(c => [c.user1_id, c.user2_id]))]
       if (ids.length === 0) {
-        setConversations([])
+        setConversations(prev => (prev.length === 0 ? prev : []))
         return
       }
       const { data: profiles } = await supabase
         .from("profiles")
-        .select("id,username,display_name,avatar_url,is_online,last_seen")
+        .select("id,username,display_name,avatar_url,is_online,last_seen,auto_replica_enabled,replica_status_note,plan_tier")
         .in("id", ids)
       const profileMap = Object.fromEntries((profiles || []).map(p => [p.id, p]))
       const enriched = data.map(c => ({
@@ -155,11 +117,14 @@ export default function Home() {
         user1: profileMap[c.user1_id] || null,
         user2: profileMap[c.user2_id] || null,
       }))
-      setConversations(enriched)
+      setConversations(prev => (sameData(prev, enriched) ? prev : enriched))
     }
 
     fetchConversations()
-    const interval = setInterval(fetchConversations, 5000)
+    // 8s instead of 5s, and skipped while the tab is in the background
+    const interval = setInterval(() => {
+      if (!document.hidden) fetchConversations()
+    }, 8000)
     return () => clearInterval(interval)
   }, [session])
 
@@ -221,8 +186,8 @@ export default function Home() {
             monthly_image_used: 0,
             monthly_image_limit: 3,
           }
+          // The server creates the real row on the first AI request; clients can no longer write quotas.
           setQuota(defaultQuota)
-          supabase.from("usage_quotas").upsert(defaultQuota, { onConflict: "user_id" }).then(() => {})
         }
       } catch (err) {
         console.error("Error loading profile or quotas:", err)
@@ -237,15 +202,8 @@ export default function Home() {
     if (quota.daily_chat_used >= quota.daily_chat_limit) {
       return false
     }
-    const nextUsed = quota.daily_chat_used + 1
-    setQuota({ ...quota, daily_chat_used: nextUsed })
-    if (session?.user?.id) {
-      supabase
-        .from("usage_quotas")
-        .update({ daily_chat_used: nextUsed, updated_at: new Date().toISOString() })
-        .eq("user_id", session.user.id)
-        .then(() => {})
-    }
+    // Local mirror only (instant UI feedback). The server enforces and records the real quota.
+    setQuota({ ...quota, daily_chat_used: quota.daily_chat_used + 1 })
     return true
   }
 
@@ -254,15 +212,7 @@ export default function Home() {
     if (quota.monthly_image_used >= quota.monthly_image_limit) {
       return false
     }
-    const nextUsed = quota.monthly_image_used + 1
-    setQuota({ ...quota, monthly_image_used: nextUsed })
-    if (session?.user?.id) {
-      supabase
-        .from("usage_quotas")
-        .update({ monthly_image_used: nextUsed, updated_at: new Date().toISOString() })
-        .eq("user_id", session.user.id)
-        .then(() => {})
-    }
+    setQuota({ ...quota, monthly_image_used: quota.monthly_image_used + 1 })
     return true
   }
 
@@ -294,9 +244,10 @@ export default function Home() {
     }
   }, [session])
 
-  // ── Load all profiles (with live presence refresh) ────────────
+  // ── Load all profiles immediately & keep presence synced ────
   useEffect(() => {
-    if (!session || view !== "people") {
+    if (!session) {
+      setAllProfiles([])
       return
     }
 
@@ -305,20 +256,26 @@ export default function Home() {
         .neq("id", session.user.id)
         .order("is_online", { ascending: false })
         .then(({ data }) => {
-          if (data) setAllProfiles(data)
+          if (data) setAllProfiles(prev => (sameData(prev, data) ? prev : data))
         })
     }
 
     fetchProfiles()
-    const pollProfiles = setInterval(fetchProfiles, 5000)
+    const pollProfiles = setInterval(() => {
+      if (!document.hidden) fetchProfiles()
+    }, 8000)
 
     const ch = supabase
       .channel("profiles-online")
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "profiles" },
+      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" },
         (p) => {
-          setAllProfiles(prev => prev.map(prof =>
-            prof.id === p.new.id ? { ...prof, ...p.new } : prof
-          ))
+          if (p.eventType === "INSERT" && p.new.id !== session.user.id) {
+            setAllProfiles(prev => (prev.some(prof => prof.id === p.new.id) ? prev : [p.new, ...prev]))
+          } else if (p.eventType === "UPDATE") {
+            setAllProfiles(prev => prev.map(prof =>
+              prof.id === p.new.id ? { ...prof, ...p.new } : prof
+            ))
+          }
         })
       .subscribe()
 
@@ -326,7 +283,7 @@ export default function Home() {
       clearInterval(pollProfiles)
       supabase.removeChannel(ch)
     }
-  }, [session, view])
+  }, [session])
 
   // ── Global DM notifications ───────────────────────────────────
   useEffect(() => {
@@ -342,7 +299,7 @@ export default function Home() {
           const other = convo.user1_id === session.user.id ? convo.user2 : convo.user1
           const name = other?.display_name || other?.username || "Someone"
           const isImage = p.new.content?.startsWith("[image]:")
-          showNotification(`New message from ${name}`, isImage ? "📷 Sent an image" : p.new.content)
+          showNotification(`New message from ${name}`, isImage ? "Sent an image" : p.new.content)
         })
       .subscribe()
     return () => { supabase.removeChannel(ch) }
@@ -359,41 +316,22 @@ export default function Home() {
         return [c, ...prev]
       })
     }
-    setActiveChar(c); setShowForm(false); setEditingChar(null); setActiveConvo(null)
-    setShowProfile(false); setChatOpen(true)
+    setActiveChar(c)
+    setActiveConvo(null)
+    setShowProfile(false)
   }
   function openConvo(c: any) {
-    setView("people")
-    localStorage.setItem("kikar_mode", "people")
-    setActiveConvo(c); setActiveChar(null); setShowForm(false); setEditingChar(null)
-    setShowProfile(false); setChatOpen(true)
-  }
-  function openForm() {
-    setEditingChar(null); setShowForm(true); setActiveChar(null); setActiveConvo(null)
-    setShowProfile(false); setChatOpen(true)
-  }
-  function openEditForm(char: any) {
-    setEditingChar(char); setShowForm(true); setActiveChar(null); setActiveConvo(null)
-    setShowProfile(false); setChatOpen(true)
+    setActiveConvo(c)
+    setActiveChar(null)
+    setShowProfile(false)
   }
   function goBack() {
-    setChatOpen(false)
     setActiveChar(null)
     setActiveConvo(null)
-    setShowForm(false)
-    setEditingChar(null)
     setShowProfile(false)
   }
 
   // ── Actions ───────────────────────────────────────────────────
-  async function searchUser() {
-    if (!searchEmail.trim()) return
-    const { data } = await supabase.from("profiles").select("*")
-      .ilike("username", `%${searchEmail}%`)
-      .neq("id", session.user.id).limit(5)
-    setSearchResult(data?.[0] || null)
-  }
-
   async function startConversation(otherUserId: string) {
     const { data: existing } = await supabase
       .from("conversations")
@@ -403,7 +341,7 @@ export default function Home() {
 
     if (existing) {
       const ids = [existing.user1_id, existing.user2_id]
-      const { data: profiles } = await supabase.from("profiles").select("id,username,display_name,avatar_url,is_online,last_seen").in("id", ids)
+      const { data: profiles } = await supabase.from("profiles").select("id,username,display_name,avatar_url,is_online,last_seen,auto_replica_enabled,replica_status_note").in("id", ids)
       const profileMap = Object.fromEntries((profiles || []).map(p => [p.id, p]))
       openConvo({ ...existing, user1: profileMap[existing.user1_id], user2: profileMap[existing.user2_id] })
       return
@@ -417,7 +355,7 @@ export default function Home() {
 
     if (data) {
       const ids = [data.user1_id, data.user2_id]
-      const { data: profiles } = await supabase.from("profiles").select("id,username,display_name,avatar_url,is_online,last_seen").in("id", ids)
+      const { data: profiles } = await supabase.from("profiles").select("id,username,display_name,avatar_url,is_online,last_seen,auto_replica_enabled,replica_status_note").in("id", ids)
       const profileMap = Object.fromEntries((profiles || []).map(p => [p.id, p]))
       const enriched = { ...data, user1: profileMap[data.user1_id], user2: profileMap[data.user2_id] }
       setConversations(prev => [enriched, ...prev])
@@ -438,7 +376,6 @@ export default function Home() {
     setActiveConvo(null)
     setMessages([])
     setProfile(null)
-    setChatOpen(false)
   }
 
   // ── Auth Loading Screen ───────────────────────────────────────
@@ -450,23 +387,23 @@ export default function Home() {
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        background: "#0d0d0d",
-        fontFamily: "'Sora', -apple-system, sans-serif",
+        background: "#0b0d11",
+        fontFamily: "'Inter', -apple-system, sans-serif",
       }}>
         <div style={{
           width: 52,
           height: 52,
           borderRadius: 16,
-          background: "hsla(119,99%,46%,0.15)",
-          border: "1px solid hsla(119,99%,46%,0.35)",
+          background: "hsla(226,72%,70%,0.15)",
+          border: "1px solid hsla(226,72%,70%,0.35)",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           fontSize: 24,
-          color: "hsl(119,99%,46%)",
-          boxShadow: "0 0 24px hsla(119,99%,46%,0.2)",
+          color: "hsl(226,72%,70%)",
+          boxShadow: "0 0 24px hsla(226,72%,70%,0.2)",
           animation: "pulse-dot 1.5s infinite ease-in-out",
-        }}>✦</div>
+        }}><Icon name="spark" /></div>
       </div>
     )
   }
@@ -475,7 +412,7 @@ export default function Home() {
   if (!session) return <AuthScreen />
 
   return (
-    <div style={{ width: "100%", height: "100dvh", overflow: "hidden", background: "#1e1f22" }}>
+    <div style={{ width: "100%", height: "100dvh", overflow: "hidden", background: "#0f1115" }}>
       {showPricing && (
         <PricingModal
           session={session}
@@ -501,7 +438,6 @@ export default function Home() {
           inset: 0,
           zIndex: 1100,
           background: "rgba(0,0,0,0.85)",
-          backdropFilter: "blur(6px)",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -532,12 +468,16 @@ export default function Home() {
         onOpenConvo={openConvo}
         activeChar={activeChar}
         onOpenChar={openChar}
+        charMessages={messages}
+        setCharMessages={setMessages}
         onCloseActive={goBack}
         onStartConversation={startConversation}
         onOpenProfile={() => setShowProfile(true)}
         onSignOut={handleSignOut}
         planTier={planTier}
         quota={quota}
+        onConsumeChatQuota={consumeChatQuota}
+        onConsumeImageQuota={consumeImageQuota}
         onOpenPricing={() => setShowPricing(true)}
         onDeleteCharacter={deleteCharacter}
         creating={creating}

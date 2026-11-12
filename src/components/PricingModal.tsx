@@ -1,7 +1,9 @@
 "use client"
 import { useState } from "react"
+import { apiFetch } from "../lib/apiFetch"
 import { T } from "../styles"
 import type { PlanTier, UsageQuota } from "../lib/types"
+import { Icon } from "./Icons"
 
 interface Props {
   session: any
@@ -66,7 +68,7 @@ export default function PricingModal({
       badge: "Power & Creator",
       priceINR: "₹699/mo",
       priceUSD: "$14.99/mo",
-      accent: "#a855f7",
+      accent: "#8b7cf6",
       features: [
         "Unlimited priority AI persona & Replica messages",
         "250 monthly AI image generations stored on CDN",
@@ -83,7 +85,7 @@ export default function PricingModal({
     setStatusMsg("")
     try {
       const provider = currency === "INR" ? "razorpay" : "stripe"
-      const res = await fetch("/api/billing/checkout", {
+      const res = await apiFetch("/api/billing/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -164,7 +166,6 @@ export default function PricingModal({
         inset: 0,
         zIndex: 9999,
         background: "rgba(0,0,0,0.82)",
-        backdropFilter: "blur(12px)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -193,7 +194,7 @@ export default function PricingModal({
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 20 }}>
           <div>
             <div style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11, fontWeight: 700, color: T.primary, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>
-              <span>⚡</span> Kikar Commercial Plans
+              <span><Icon name="radar" /></span> Kikar Commercial Plans
             </div>
             <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: T.text, letterSpacing: "-0.02em" }}>
               Power Up Your Digital Twin & AI Personas
@@ -239,7 +240,7 @@ export default function PricingModal({
                 cursor: "pointer",
               }}
             >
-              ✕
+              
             </button>
           </div>
         </div>
@@ -264,13 +265,13 @@ export default function PricingModal({
             </div>
             <div style={{ display: "flex", gap: 20, fontSize: 12, color: T.muted }}>
               <span>
-                💬 Daily AI Chats:{" "}
+                Daily AI Chats:{" "}
                 <strong style={{ color: T.text }}>
                   {quota.daily_chat_used} / {quota.daily_chat_limit >= 999999 ? "∞" : quota.daily_chat_limit}
                 </strong>
               </span>
               <span>
-                🖼️ Monthly AI Images:{" "}
+                Monthly AI Images:{" "}
                 <strong style={{ color: T.text }}>
                   {quota.monthly_image_used} / {quota.monthly_image_limit}
                 </strong>
@@ -282,15 +283,15 @@ export default function PricingModal({
         {statusMsg && (
           <div style={{
             padding: "10px 14px",
-            background: "hsla(119,99%,46%,0.12)",
-            border: "1px solid hsla(119,99%,46%,0.35)",
+            background: "hsla(226,72%,70%,0.12)",
+            border: "1px solid hsla(226,72%,70%,0.35)",
             borderRadius: 10,
             color: T.primary,
             fontSize: 13,
             fontWeight: 600,
             marginBottom: 16,
           }}>
-            ✓ {statusMsg}
+            {statusMsg}
           </div>
         )}
 
@@ -311,7 +312,7 @@ export default function PricingModal({
                   border: isHighlight
                     ? `1.5px solid ${T.primary}`
                     : isCurrent
-                    ? "1.5px solid #a855f7"
+                    ? "1.5px solid #8b7cf6"
                     : `1px solid ${T.border}`,
                   borderRadius: 16,
                   padding: 20,
@@ -319,7 +320,7 @@ export default function PricingModal({
                   flexDirection: "column",
                   justifyContent: "space-between",
                   position: "relative",
-                  boxShadow: isHighlight ? "0 8px 30px hsla(119,99%,46%,0.1)" : "none",
+                  boxShadow: isHighlight ? "0 8px 30px hsla(226,72%,70%,0.1)" : "none",
                 }}
               >
                 <div>
@@ -330,7 +331,7 @@ export default function PricingModal({
                       fontWeight: 700,
                       padding: "3px 8px",
                       borderRadius: 999,
-                      background: isHighlight ? "hsla(119,99%,46%,0.15)" : "rgba(255,255,255,0.06)",
+                      background: isHighlight ? "hsla(226,72%,70%,0.15)" : "rgba(255,255,255,0.06)",
                       color: t.accent,
                       textTransform: "uppercase",
                     }}>
@@ -345,7 +346,7 @@ export default function PricingModal({
                   <ul style={{ listStyle: "none", padding: 0, margin: "0 0 20px", display: "flex", flexDirection: "column", gap: 9 }}>
                     {t.features.map(f => (
                       <li key={f} style={{ fontSize: 12, color: T.muted, display: "flex", alignItems: "flex-start", gap: 8, lineHeight: 1.45 }}>
-                        <span style={{ color: t.accent, fontWeight: 700 }}>✓</span>
+                        <span style={{ color: t.accent, fontWeight: 700 }}></span>
                         <span>{f}</span>
                       </li>
                     ))}
@@ -364,8 +365,8 @@ export default function PricingModal({
                     background: isCurrent
                       ? T.surface
                       : t.id === "pro"
-                      ? "linear-gradient(135deg, #a855f7 0%, #7e22ce 100%)"
-                      : "linear-gradient(135deg, hsl(119,99%,46%) 0%, hsl(119,99%,38%) 100%)",
+                      ? "linear-gradient(135deg, #8b7cf6 0%, #5b4bc4 100%)"
+                      : "linear-gradient(135deg, hsl(226,72%,70%) 0%, hsl(226,62%,58%) 100%)",
                     color: isCurrent ? T.muted : t.id === "pro" ? "#fff" : T.primaryFg,
                     fontWeight: 700,
                     fontSize: 13,
@@ -376,7 +377,7 @@ export default function PricingModal({
                   {isCurrent
                     ? "✓ Active Plan"
                     : loadingTier === t.id
-                    ? "⏳ Activating…"
+                    ? "Activating…"
                     : `Switch to ${t.name} →`}
                 </button>
               </div>

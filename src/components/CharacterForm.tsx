@@ -3,15 +3,16 @@ import { useState, useEffect } from "react"
 import { supabase } from "../lib/supabase"
 import { T } from "../styles"
 import ElectricBorder from "./ElectricBorder"
+import { Icon } from "./Icons"
 
 const EMOJIS = ["🤖", "🧙", "🦊", "🐉", "👾", "🧠", "🕵️", "🧜", "🦁", "🎭", "👻", "🤡", "🧛", "🦸", "🧝", "🐱", "🐶", "🚀", "⚡", "🔮"]
 
 const CATEGORIES = [
-  { id: "general", label: "🌟 General Companion" },
-  { id: "study",   label: "📚 Study & Coding Mentor" },
-  { id: "roleplay",label: "🎭 Story & Roleplay" },
-  { id: "coach",   label: "💪 Life & Career Coach" },
-  { id: "creator", label: "✨ Creator Digital Twin" },
+  { id: "general", label: "General Companion" },
+  { id: "study",   label: "Study & Coding Mentor" },
+  { id: "roleplay",label: "Story & Roleplay" },
+  { id: "coach",   label: "Life & Career Coach" },
+  { id: "creator", label: "Creator Digital Twin" },
 ]
 
 const BOUNDARY_PRESETS = [
@@ -232,7 +233,7 @@ export default function CharacterForm({ session, initialChar, onCreated, onUpdat
 
       {/* Electric Border Wrapped Character Preview Card */}
       <ElectricBorder
-        color="hsl(119, 99%, 46%)"
+        color="hsl(226, 72%, 70%)"
         speed={1}
         chaos={0.1}
         borderRadius={16}
@@ -250,13 +251,13 @@ export default function CharacterForm({ session, initialChar, onCreated, onUpdat
             width: 54,
             height: 54,
             borderRadius: 14,
-            background: "hsla(119,99%,46%,0.15)",
-            border: "1px solid hsla(119,99%,46%,0.3)",
+            background: "hsla(226,72%,70%,0.15)",
+            border: "1px solid hsla(226,72%,70%,0.3)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             fontSize: 28,
-            boxShadow: "0 0 20px hsla(119,99%,46%,0.2)",
+            boxShadow: "0 0 20px hsla(226,72%,70%,0.2)",
           }}>{newChar.emoji}</div>
           <div style={{ flex: 1 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -332,7 +333,7 @@ export default function CharacterForm({ session, initialChar, onCreated, onUpdat
                 borderRadius: 999,
                 fontSize: 12,
                 fontWeight: active ? 700 : 500,
-                background: active ? "hsla(119,99%,46%,0.15)" : T.surface,
+                background: active ? "hsla(226,72%,70%,0.15)" : T.surface,
                 border: active ? `1px solid ${T.primary}` : `1px solid ${T.border}`,
                 color: active ? T.primary : T.muted,
                 cursor: "pointer",
@@ -365,15 +366,15 @@ export default function CharacterForm({ session, initialChar, onCreated, onUpdat
               style={{
                 fontSize: 22,
                 padding: "8px 10px",
-                background: isSelected ? "hsla(119,99%,46%,0.15)" : T.surface,
+                background: isSelected ? "hsla(226,72%,70%,0.15)" : T.surface,
                 border: isSelected
-                  ? "1px solid hsla(119,99%,46%,0.6)"
+                  ? "1px solid hsla(226,72%,70%,0.6)"
                   : `1px solid ${T.border}`,
                 borderRadius: 10,
                 cursor: "pointer",
                 transform: isSelected ? "scale(1.1)" : "scale(1)",
-                boxShadow: isSelected ? "0 0 14px hsla(119,99%,46%,0.3)" : "none",
-                transition: "all 0.15s ease",
+                boxShadow: isSelected ? "0 0 14px hsla(226,72%,70%,0.3)" : "none",
+                transition: "background-color 0.15s, border-color 0.15s, color 0.15s, opacity 0.15s, box-shadow 0.15s, transform 0.15s ease",
               }}
             >{em}</button>
           )
@@ -448,7 +449,7 @@ export default function CharacterForm({ session, initialChar, onCreated, onUpdat
         borderRadius: 14,
       }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: T.text, marginBottom: 4, display: "flex", alignItems: "center", gap: 6 }}>
-          <span>🎛️</span> Vibe &amp; Boundaries Tuner
+          <span><Icon name="settings" /></span> Vibe &amp; Boundaries Tuner
         </div>
         <p style={{ fontSize: 11, color: T.muted, margin: "0 0 14px" }}>
           Fine-tune how this persona (or your Digital Replica) responds without writing complex prompt code.
@@ -457,9 +458,9 @@ export default function CharacterForm({ session, initialChar, onCreated, onUpdat
         {/* Tone slider */}
         <div style={{ marginBottom: 14 }}>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: T.muted, marginBottom: 4 }}>
-            <span>🤝 Warm &amp; Empathetic</span>
+            <span>Warm &amp; Empathetic</span>
             <strong style={{ color: T.primary }}>Tone Balance ({warmthVsWit}%)</strong>
-            <span>⚡ Witty &amp; Sarcastic</span>
+            <span>Witty &amp; Sarcastic</span>
           </div>
           <input
             type="range"
@@ -467,16 +468,16 @@ export default function CharacterForm({ session, initialChar, onCreated, onUpdat
             max={100}
             value={warmthVsWit}
             onChange={e => setWarmthVsWit(Number(e.target.value))}
-            style={{ width: "100%", accentColor: "hsl(119, 99%, 46%)" }}
+            style={{ width: "100%", accentColor: "hsl(226, 72%, 70%)" }}
           />
         </div>
 
         {/* Length slider */}
         <div style={{ marginBottom: 14 }}>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: T.muted, marginBottom: 4 }}>
-            <span>💬 Punchy 1-Liners</span>
+            <span>Punchy 1-Liners</span>
             <strong style={{ color: T.primary }}>Reply Length ({replyLength}%)</strong>
-            <span>📜 Deep Paragraphs</span>
+            <span>Deep Paragraphs</span>
           </div>
           <input
             type="range"
@@ -484,7 +485,7 @@ export default function CharacterForm({ session, initialChar, onCreated, onUpdat
             max={100}
             value={replyLength}
             onChange={e => setReplyLength(Number(e.target.value))}
-            style={{ width: "100%", accentColor: "hsl(119, 99%, 46%)" }}
+            style={{ width: "100%", accentColor: "hsl(226, 72%, 70%)" }}
           />
         </div>
 
@@ -495,7 +496,7 @@ export default function CharacterForm({ session, initialChar, onCreated, onUpdat
             {([
               { id: "english", label: "🇬🇧 English" },
               { id: "hinglish", label: "🇮🇳 Hinglish Mix" },
-              { id: "multilingual", label: "🌐 Auto-Adapt" },
+              { id: "multilingual", label: "Auto-Adapt" },
             ] as const).map(lang => (
               <button
                 key={lang.id}
@@ -508,7 +509,7 @@ export default function CharacterForm({ session, initialChar, onCreated, onUpdat
                   fontSize: 11,
                   fontWeight: 600,
                   cursor: "pointer",
-                  background: languageMix === lang.id ? "hsla(119,99%,46%,0.15)" : T.bgAlt,
+                  background: languageMix === lang.id ? "hsla(226,72%,70%,0.15)" : T.bgAlt,
                   border: languageMix === lang.id ? `1px solid ${T.primary}` : `1px solid ${T.border}`,
                   color: languageMix === lang.id ? T.primary : T.muted,
                   fontFamily: T.font,
@@ -542,7 +543,7 @@ export default function CharacterForm({ session, initialChar, onCreated, onUpdat
                     type="checkbox"
                     checked={checked}
                     onChange={() => toggleBoundary(b)}
-                    style={{ accentColor: "hsl(119, 99%, 46%)" }}
+                    style={{ accentColor: "hsl(226, 72%, 70%)" }}
                   />
                   <span>{b}</span>
                 </label>
@@ -582,7 +583,7 @@ export default function CharacterForm({ session, initialChar, onCreated, onUpdat
             gap: 6,
           }}
         >
-          <span>🔒</span> Private
+          <span><Icon name="lock" /></span> Private
         </button>
         <button
           type="button"
@@ -603,7 +604,7 @@ export default function CharacterForm({ session, initialChar, onCreated, onUpdat
             gap: 6,
           }}
         >
-          <span>🌍</span> Public Marketplace
+          <span><Icon name="globe" /></span> Public Marketplace
         </button>
       </div>
 
@@ -635,7 +636,7 @@ export default function CharacterForm({ session, initialChar, onCreated, onUpdat
             padding: "13px 0",
             background: saving || !newChar.name.trim() || !newChar.personality.trim()
               ? T.surface
-              : "linear-gradient(135deg, hsl(119,99%,46%) 0%, hsl(119,99%,38%) 100%)",
+              : "linear-gradient(135deg, hsl(226,72%,70%) 0%, hsl(226,62%,58%) 100%)",
             border: `1px solid ${saving || !newChar.name.trim() || !newChar.personality.trim() ? T.border : "transparent"}`,
             borderRadius: 10,
             fontWeight: 700,
@@ -646,10 +647,10 @@ export default function CharacterForm({ session, initialChar, onCreated, onUpdat
             letterSpacing: "0.01em",
             boxShadow: saving || !newChar.name.trim() || !newChar.personality.trim()
               ? "none"
-              : "0 4px 20px hsla(119,99%,46%,0.25)",
+              : "0 4px 20px hsla(226,72%,70%,0.25)",
           }}
         >
-          {saving ? "⏳ Saving…" : isEditing ? "✓ Save Changes" : "✦ Create & Chat"}
+          {saving ? "Saving…" : isEditing ? "Save Changes" : "Create & Chat"}
         </button>
       </div>
     </div>

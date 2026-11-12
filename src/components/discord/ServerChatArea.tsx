@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect } from "react"
 import { T } from "../../styles"
 import type { DiscordChannel, DiscordMessage } from "../../lib/discordTypes"
+import { Icon } from "../Icons"
 
 interface Props {
   channel: DiscordChannel
@@ -20,6 +21,7 @@ interface Props {
   onReactMessage?: (msgId: string, emoji: string) => void
   voiceConnected?: boolean
   onToggleVoice?: () => void
+  voiceStage?: React.ReactNode
 }
 
 const QUICK_EMOJIS = ["👍", "❤️", "🔥", "😂", "💀", "🚀"]
@@ -41,6 +43,7 @@ export default function ServerChatArea({
   onReactMessage,
   voiceConnected = false,
   onToggleVoice,
+  voiceStage,
 }: Props) {
   const [input, setInput] = useState("")
   const [hoveredMsgId, setHoveredMsgId] = useState<string | null>(null)
@@ -98,7 +101,7 @@ export default function ServerChatArea({
         height: "100%",
         display: "flex",
         flexDirection: "column",
-        background: "#1e1f22",
+        background: "#0f1115",
         position: "relative",
         overflow: "hidden",
       }}
@@ -112,7 +115,7 @@ export default function ServerChatArea({
           alignItems: "center",
           justifyContent: "space-between",
           borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
-          background: "#1e1f22",
+          background: "#0f1115",
           flexShrink: 0,
           zIndex: 10,
         }}
@@ -127,21 +130,21 @@ export default function ServerChatArea({
               style={{
                 background: "transparent",
                 border: "none",
-                color: "#dbdee1",
+                color: "#d5d9e0",
                 fontSize: 18,
                 cursor: "pointer",
                 padding: "4px 8px 4px 0",
               }}
             >
-              ☰
+              
             </button>
           )}
 
-          <span style={{ fontSize: 20, color: "#80848e", fontWeight: 700 }}>
-            {channel.type === "radar" ? "⚡" : channel.type === "ai" ? "🤖" : "#"}
+          <span style={{ fontSize: 20, color: "#7a8290", fontWeight: 700 }}>
+            {channel.type === "radar" ? <Icon name="radar" /> : channel.type === "ai" ? <Icon name="bot" /> : "#"}
           </span>
 
-          <span style={{ fontSize: 16, fontWeight: 700, color: "#f2f3f5", whiteSpace: "nowrap" }}>
+          <span style={{ fontSize: 16, fontWeight: 700, color: "#eceef2", whiteSpace: "nowrap" }}>
             {channel.name}
           </span>
 
@@ -151,7 +154,7 @@ export default function ServerChatArea({
               <span
                 style={{
                   fontSize: 13,
-                  color: "#949ba4",
+                  color: "#9aa1ad",
                   overflow: "hidden",
                   textOverflow: "ellipsis",
                   whiteSpace: "nowrap",
@@ -177,15 +180,15 @@ export default function ServerChatArea({
                 gap: 5,
                 padding: "4px 10px",
                 borderRadius: 6,
-                background: voiceConnected ? "rgba(34, 197, 94, 0.2)" : "rgba(255, 255, 255, 0.06)",
-                border: voiceConnected ? "1px solid #22c55e" : "1px solid rgba(255, 255, 255, 0.12)",
-                color: voiceConnected ? "#22c55e" : "#b5bac1",
+                background: voiceConnected ? "rgba(79,185,135, 0.2)" : "rgba(255, 255, 255, 0.06)",
+                border: voiceConnected ? "1px solid #4fb987" : "1px solid rgba(255, 255, 255, 0.12)",
+                color: voiceConnected ? "#4fb987" : "#aab1bc",
                 fontSize: 12,
                 fontWeight: 700,
                 cursor: "pointer",
               }}
             >
-              <span>{voiceConnected ? "🔊" : "🔈"}</span>
+              <span>{voiceConnected ? <Icon name="volume" /> : <Icon name="volumeLow" />}</span>
               <span className="hide-on-mobile">{voiceConnected ? "Connected" : "Join Voice"}</span>
             </button>
           )}
@@ -201,15 +204,15 @@ export default function ServerChatArea({
                 gap: 5,
                 padding: "4px 10px",
                 borderRadius: 6,
-                background: "rgba(168, 85, 247, 0.15)",
-                border: "1px solid rgba(168, 85, 247, 0.35)",
-                color: "#c084fc",
+                background: "rgba(139,124,246, 0.15)",
+                border: "1px solid rgba(139,124,246, 0.35)",
+                color: "#b3a8f8",
                 fontSize: 12,
                 fontWeight: 700,
                 cursor: "pointer",
               }}
             >
-              <span>🎲</span>
+              <span><Icon name="shuffle" /></span>
               <span className="hide-on-mobile">Wingman</span>
             </button>
           )}
@@ -222,7 +225,7 @@ export default function ServerChatArea({
               background: memberListOpen ? "rgba(255, 255, 255, 0.12)" : "transparent",
               border: "none",
               borderRadius: 6,
-              color: memberListOpen ? "#ffffff" : "#b5bac1",
+              color: memberListOpen ? "#f4f5f7" : "#aab1bc",
               fontSize: 16,
               width: 32,
               height: 32,
@@ -232,28 +235,31 @@ export default function ServerChatArea({
               cursor: "pointer",
             }}
           >
-            👥
+            <Icon name="users" />
           </button>
         </div>
       </header>
 
-      {/* ── Voice Banner (If Connected) ───────────────────────────── */}
-      {voiceConnected && (
+      {/* ── Interactive WebRTC Voice Lounge Stage (When in voice channel) ── */}
+      {voiceStage}
+
+      {/* ── Voice Banner (If Connected in background while browsing text channel) ── */}
+      {voiceConnected && !voiceStage && (
         <div
           style={{
             padding: "8px 16px",
-            background: "rgba(34, 197, 94, 0.1)",
-            borderBottom: "1px solid rgba(34, 197, 94, 0.25)",
+            background: "rgba(79,185,135, 0.1)",
+            borderBottom: "1px solid rgba(79,185,135, 0.25)",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
             fontSize: 12,
-            color: "#22c55e",
+            color: "#4fb987",
             fontWeight: 600,
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 8px #22c55e" }} />
+            <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#4fb987", boxShadow: "0 0 8px #4fb987" }} />
             <span>Voice Connected / RTC Latency: 24ms</span>
           </div>
           {onToggleVoice && (
@@ -263,13 +269,13 @@ export default function ServerChatArea({
               style={{
                 background: "transparent",
                 border: "none",
-                color: "#f87171",
+                color: "#ef8a8a",
                 cursor: "pointer",
                 fontWeight: 700,
                 fontSize: 11,
               }}
             >
-              Disconnect 🔴
+              Disconnect 
             </button>
           )}
         </div>
@@ -294,21 +300,21 @@ export default function ServerChatArea({
               width: 68,
               height: 68,
               borderRadius: "50%",
-              background: "#2b2d31",
+              background: "#161a20",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               fontSize: 34,
-              color: "#ffffff",
+              color: "#f4f5f7",
               marginBottom: 12,
             }}
           >
-            {channel.type === "radar" ? "⚡" : channel.type === "ai" ? "🤖" : "#"}
+            {channel.type === "radar" ? <Icon name="radar" /> : channel.type === "ai" ? <Icon name="bot" /> : "#"}
           </div>
-          <h2 style={{ margin: 0, fontSize: 24, fontWeight: 700, color: "#f2f3f5" }}>
+          <h2 style={{ margin: 0, fontSize: 24, fontWeight: 700, color: "#eceef2" }}>
             Welcome to #{channel.name}!
           </h2>
-          <p style={{ margin: "6px 0 0", fontSize: 14, color: "#949ba4" }}>
+          <p style={{ margin: "6px 0 0", fontSize: 14, color: "#9aa1ad" }}>
             This is the start of the #{channel.name} channel. Chat with fellow members, mention @ai for smart assistance, or test digital replicas!
           </p>
         </div>
@@ -336,7 +342,7 @@ export default function ServerChatArea({
                   : isHovered
                   ? "rgba(255, 255, 255, 0.03)"
                   : "transparent",
-                borderLeft: hasMention ? "2px solid #f0b232" : "2px solid transparent",
+                borderLeft: hasMention ? "2px solid #e0ac4e" : "2px solid transparent",
                 transition: "background 0.1s ease",
               }}
             >
@@ -347,7 +353,7 @@ export default function ServerChatArea({
                     position: "absolute",
                     top: -14,
                     right: 12,
-                    background: "#2b2d31",
+                    background: "#161a20",
                     border: "1px solid rgba(255, 255, 255, 0.1)",
                     borderRadius: 6,
                     padding: "2px 6px",
@@ -378,7 +384,7 @@ export default function ServerChatArea({
                     title="Ask AI to Explain"
                     style={{ background: "transparent", border: "none", cursor: "pointer", fontSize: 12, padding: "2px 4px", color: T.primary, fontWeight: 700 }}
                   >
-                    ✦ AI
+                    AI
                   </button>
                 </div>
               )}
@@ -398,8 +404,8 @@ export default function ServerChatArea({
                         width: 40,
                         height: 40,
                         borderRadius: "50%",
-                        background: msg.role === "bot" ? "hsla(119,99%,46%,0.2)" : msg.role === "replica" ? "rgba(168,85,247,0.2)" : "#313338",
-                        color: msg.role === "bot" ? T.primary : msg.role === "replica" ? "#c084fc" : "#dbdee1",
+                        background: msg.role === "bot" ? "hsla(226,72%,70%,0.2)" : msg.role === "replica" ? "rgba(139,124,246,0.2)" : "#1e232b",
+                        color: msg.role === "bot" ? T.primary : msg.role === "replica" ? "#b3a8f8" : "#d5d9e0",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
@@ -407,12 +413,12 @@ export default function ServerChatArea({
                         fontWeight: 700,
                       }}
                     >
-                      {msg.role === "bot" ? "🤖" : msg.role === "replica" ? "🪞" : "👤"}
+                      {msg.role === "bot" ? <Icon name="bot" /> : msg.role === "replica" ? <Icon name="twin" /> : <Icon name="user" />}
                     </div>
                   )}
                 </div>
               ) : (
-                <div style={{ width: 40, flexShrink: 0, textAlign: "right", fontSize: 10, color: "#666" }}>
+                <div style={{ width: 40, flexShrink: 0, textAlign: "right", fontSize: 10, color: "#6a7280" }}>
                   {isHovered && new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                 </div>
               )}
@@ -425,7 +431,7 @@ export default function ServerChatArea({
                       style={{
                         fontSize: 14,
                         fontWeight: 700,
-                        color: msg.role === "bot" ? T.primary : msg.role === "replica" ? "#c084fc" : "#f2f3f5",
+                        color: msg.role === "bot" ? T.primary : msg.role === "replica" ? "#b3a8f8" : "#eceef2",
                         cursor: "pointer",
                       }}
                     >
@@ -440,8 +446,8 @@ export default function ServerChatArea({
                           fontWeight: 800,
                           padding: "1px 5px",
                           borderRadius: 4,
-                          background: msg.badge === "BOT" ? "#5865F2" : msg.badge === "REPLICA" ? "#a855f7" : "#f0b232",
-                          color: "#ffffff",
+                          background: msg.badge === "BOT" ? "#5f73e6" : msg.badge === "REPLICA" ? "#8b7cf6" : "#e0ac4e",
+                          color: "#f4f5f7",
                           letterSpacing: "0.04em",
                         }}
                       >
@@ -449,7 +455,7 @@ export default function ServerChatArea({
                       </span>
                     )}
 
-                    <span style={{ fontSize: 11, color: "#949ba4" }}>
+                    <span style={{ fontSize: 11, color: "#9aa1ad" }}>
                       {new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                     </span>
                   </div>
@@ -460,7 +466,7 @@ export default function ServerChatArea({
                   style={{
                     fontSize: 14,
                     lineHeight: 1.5,
-                    color: "#dbdee1",
+                    color: "#d5d9e0",
                     wordBreak: "break-word",
                     userSelect: "text",
                     WebkitUserSelect: "text",
@@ -493,12 +499,12 @@ export default function ServerChatArea({
                           type="button"
                           onClick={() => onReactMessage && onReactMessage(msg.id, emoji)}
                           style={{
-                            background: hasReacted ? "rgba(88, 101, 242, 0.25)" : "#2b2d31",
-                            border: hasReacted ? "1px solid #5865F2" : "1px solid rgba(255, 255, 255, 0.1)",
+                            background: hasReacted ? "rgba(88, 101, 242, 0.25)" : "#161a20",
+                            border: hasReacted ? "1px solid #5f73e6" : "1px solid rgba(255, 255, 255, 0.1)",
                             borderRadius: 6,
                             padding: "2px 6px",
                             fontSize: 12,
-                            color: hasReacted ? "#ffffff" : "#b5bac1",
+                            color: hasReacted ? "#f4f5f7" : "#aab1bc",
                             display: "flex",
                             alignItems: "center",
                             gap: 4,
@@ -529,14 +535,14 @@ export default function ServerChatArea({
             alignItems: "center",
             gap: 6,
             fontSize: 11,
-            color: "#949ba4",
-            background: "#1e1f22",
+            color: "#9aa1ad",
+            background: "#0f1115",
           }}
         >
           <span className="typing-dot" style={{ width: 5, height: 5 }} />
           <span className="typing-dot" style={{ width: 5, height: 5 }} />
           <span className="typing-dot" style={{ width: 5, height: 5 }} />
-          <span style={{ fontWeight: 600, color: "#f2f3f5" }}>
+          <span style={{ fontWeight: 600, color: "#eceef2" }}>
             {typingNames.slice(0, 3).join(", ")}
           </span>
           <span>{typingNames.length === 1 ? "is typing..." : "are typing..."}</span>
@@ -547,7 +553,7 @@ export default function ServerChatArea({
       <div
         style={{
           padding: "0 16px 18px",
-          background: "#1e1f22",
+          background: "#0f1115",
           flexShrink: 0,
         }}
       >
@@ -589,7 +595,7 @@ export default function ServerChatArea({
               borderRadius: "50%",
               background: "#4e5058",
               border: "none",
-              color: "#dbdee1",
+              color: "#d5d9e0",
               fontSize: 16,
               fontWeight: 700,
               cursor: "pointer",
@@ -613,7 +619,7 @@ export default function ServerChatArea({
               background: "transparent",
               border: "none",
               outline: "none",
-              color: "#dbdee1",
+              color: "#d5d9e0",
               fontSize: 15,
               fontFamily: T.font,
             }}
@@ -629,9 +635,9 @@ export default function ServerChatArea({
             style={{
               padding: "2px 8px",
               borderRadius: 4,
-              background: input.startsWith("@ai") ? "hsla(119,99%,46%,0.2)" : "transparent",
+              background: input.startsWith("@ai") ? "hsla(226,72%,70%,0.2)" : "transparent",
               border: input.startsWith("@ai") ? `1px solid ${T.primary}` : "1px solid rgba(255,255,255,0.1)",
-              color: input.startsWith("@ai") ? T.primary : "#949ba4",
+              color: input.startsWith("@ai") ? T.primary : "#9aa1ad",
               fontSize: 11,
               fontWeight: 700,
               cursor: "pointer",
@@ -654,7 +660,7 @@ export default function ServerChatArea({
                 cursor: generatingImg ? "wait" : "pointer",
               }}
             >
-              {generatingImg ? "⏳" : "🖼️"}
+              {generatingImg ? <Icon name="clock" /> : <Icon name="image" />}
             </button>
           )}
 
@@ -668,16 +674,16 @@ export default function ServerChatArea({
               width: 30,
               height: 30,
               borderRadius: "50%",
-              background: input.trim() ? "hsl(119, 99%, 46%)" : "transparent",
+              background: input.trim() ? "hsl(226, 72%, 70%)" : "transparent",
               border: "none",
-              color: input.trim() ? "#000" : "#80848e",
+              color: input.trim() ? "#000" : "#7a8290",
               fontSize: 14,
               fontWeight: 800,
               cursor: input.trim() ? "pointer" : "default",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              transition: "all 0.15s ease",
+              transition: "background-color 0.15s, border-color 0.15s, color 0.15s, opacity 0.15s, box-shadow 0.15s, transform 0.15s ease",
             }}
           >
             ↑
@@ -692,7 +698,6 @@ export default function ServerChatArea({
             position: "absolute",
             inset: 0,
             background: "rgba(0,0,0,0.75)",
-            backdropFilter: "blur(6px)",
             zIndex: 100,
             display: "flex",
             alignItems: "center",
@@ -704,7 +709,7 @@ export default function ServerChatArea({
           <div
             onClick={(e) => e.stopPropagation()}
             style={{
-              background: "#2b2d31",
+              background: "#161a20",
               border: "1px solid rgba(255,255,255,0.1)",
               borderRadius: 12,
               padding: 20,
@@ -715,8 +720,8 @@ export default function ServerChatArea({
               gap: 14,
             }}
           >
-            <h3 style={{ margin: 0, fontSize: 16, color: "#f2f3f5", fontWeight: 700 }}>
-              🖼️ Generate Image with Gemini AI
+            <h3 style={{ margin: 0, fontSize: 16, color: "#eceef2", fontWeight: 700 }}>
+              Generate Image with Gemini AI
             </h3>
             <input
               value={imagePromptText}
@@ -724,10 +729,10 @@ export default function ServerChatArea({
               placeholder="e.g. Cyberpunk city with neon glowing rain..."
               style={{
                 padding: "10px 14px",
-                background: "#1e1f22",
+                background: "#0f1115",
                 border: "1px solid rgba(255,255,255,0.1)",
                 borderRadius: 8,
-                color: "#f2f3f5",
+                color: "#eceef2",
                 fontSize: 14,
                 outline: "none",
               }}
@@ -742,7 +747,7 @@ export default function ServerChatArea({
                   borderRadius: 6,
                   background: "transparent",
                   border: "1px solid rgba(255,255,255,0.1)",
-                  color: "#949ba4",
+                  color: "#9aa1ad",
                   fontSize: 13,
                   cursor: "pointer",
                 }}
@@ -756,7 +761,7 @@ export default function ServerChatArea({
                 style={{
                   padding: "8px 16px",
                   borderRadius: 6,
-                  background: "hsl(119, 99%, 46%)",
+                  background: "hsl(226, 72%, 70%)",
                   border: "none",
                   color: "#000",
                   fontSize: 13,

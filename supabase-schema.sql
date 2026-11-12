@@ -3,6 +3,7 @@
 -- ==============================================================================
 -- Run this script in the Supabase SQL Editor (https://supabase.com/dashboard/project/_/sql)
 -- to initialize all required tables, realtime replication, triggers, and storage.
+-- THEN run supabase-migration-v5-security.sql (tightens policies; quotas and plans become server-only).
 
 -- 1. PROFILES TABLE (Extended with Auto-Replica & Plan Metadata)
 create table if not exists public.profiles (

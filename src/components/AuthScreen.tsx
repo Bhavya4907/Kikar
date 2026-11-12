@@ -4,6 +4,7 @@ import { supabase, isSupabaseConfigured } from "../lib/supabase"
 import ElectricBorder from "./ElectricBorder"
 import GlareHover from "./GlareHover"
 import LandingHero from "./LandingHero"
+import { Icon } from "./Icons"
 
 export default function AuthScreen() {
   const [authMode, setAuthMode] = useState<"login" | "signup" | "forgot">("login")
@@ -117,9 +118,9 @@ export default function AuthScreen() {
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
-      background: "radial-gradient(ellipse at 50% 0%, hsla(119,99%,46%,0.1) 0%, #0d0d0d 70%)",
+      background: "radial-gradient(ellipse at 50% 0%, hsla(226,72%,70%,0.1) 0%, #0b0d11 70%)",
       padding: 20,
-      fontFamily: "'Sora', -apple-system, sans-serif",
+      fontFamily: "'Inter', -apple-system, sans-serif",
       position: "relative"
     }}>
       {/* Top Left Navigation Back to Landing Hero */}
@@ -135,10 +136,10 @@ export default function AuthScreen() {
       <GlareHover
         width="100%"
         height="auto"
-        background="rgba(20, 20, 20, 0.95)"
+        background="rgba(18, 21, 26, 0.97)"
         borderRadius="20px"
         borderColor="rgba(255, 255, 255, 0.08)"
-        glareColor="#ffffff"
+        glareColor="#f4f5f7"
         glareOpacity={0.25}
         glareAngle={-30}
         glareSize={300}
@@ -146,13 +147,12 @@ export default function AuthScreen() {
         playOnce={false}
         style={{
           maxWidth: 420,
-          backdropFilter: "blur(24px)",
           boxShadow: "0 24px 80px rgba(0,0,0,0.8)",
           display: "block",
         }}
       >
         <ElectricBorder
-          color="hsl(119, 99%, 46%)"
+          color="hsl(226, 72%, 70%)"
           speed={1.4}
           chaos={0.14}
           borderRadius={20}
@@ -180,27 +180,27 @@ export default function AuthScreen() {
                 width: 52,
                 height: 52,
                 borderRadius: 16,
-                background: "hsla(119,99%,46%,0.15)",
-                border: "1px solid hsla(119,99%,46%,0.35)",
+                background: "hsla(226,72%,70%,0.15)",
+                border: "1px solid hsla(226,72%,70%,0.35)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 fontSize: 24,
-                boxShadow: "0 0 24px hsla(119,99%,46%,0.2)",
-              }}>✦</div>
+                boxShadow: "0 0 24px hsla(226,72%,70%,0.2)",
+              }}><Icon name="spark" /></div>
               <div style={{ textAlign: "center" }}>
                 <h1 style={{
                   margin: 0,
                   fontSize: 22,
                   fontWeight: 700,
-                  color: "#f0f0f0",
+                  color: "#e6e8ec",
                   letterSpacing: "-0.03em",
                 }}>
-                  KIKAR <span style={{ color: "hsl(119,99%,46%)" }}>AI</span>
+                  KIKAR <span style={{ color: "hsl(226,72%,70%)" }}>AI</span>
                 </h1>
                 <p style={{
                   margin: "4px 0 0",
-                  color: "#888",
+                  color: "#9aa1ad",
                   fontSize: 13,
                   fontWeight: 400,
                 }}>
@@ -233,7 +233,7 @@ export default function AuthScreen() {
                 borderRadius: 10,
                 overflow: "hidden",
                 border: "1px solid rgba(255,255,255,0.08)",
-                background: "#0d0d0d",
+                background: "#0b0d11",
               }}>
                 {(["login", "signup"] as const).map(m => (
                   <button
@@ -243,14 +243,14 @@ export default function AuthScreen() {
                     style={{
                       flex: 1,
                       padding: "10px 0",
-                      background: authMode === m ? "hsla(119,99%,46%,0.12)" : "transparent",
-                      border: authMode === m ? "1px solid hsla(119,99%,46%,0.3)" : "none",
-                      color: authMode === m ? "hsl(119,99%,46%)" : "#888",
+                      background: authMode === m ? "hsla(226,72%,70%,0.12)" : "transparent",
+                      border: authMode === m ? "1px solid hsla(226,72%,70%,0.3)" : "none",
+                      color: authMode === m ? "hsl(226,72%,70%)" : "#9aa1ad",
                       cursor: "pointer",
                       fontSize: 13,
                       fontWeight: authMode === m ? 600 : 400,
-                      fontFamily: "'Sora', sans-serif",
-                      transition: "all 0.18s ease",
+                      fontFamily: "'Inter', sans-serif",
+                      transition: "background-color 0.18s, border-color 0.18s, color 0.18s, opacity 0.18s, box-shadow 0.18s, transform 0.18s ease",
                     }}>
                     {m === "login" ? "Sign In" : "Sign Up"}
                   </button>
@@ -263,7 +263,7 @@ export default function AuthScreen() {
                 style={{
                   background: "transparent",
                   border: "none",
-                  color: "hsl(119,99%,46%)",
+                  color: "hsl(226,72%,70%)",
                   fontSize: 12,
                   fontWeight: 600,
                   cursor: "pointer",
@@ -284,7 +284,7 @@ export default function AuthScreen() {
                 <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
                   <label style={{
                     fontSize: 11,
-                    color: "#888",
+                    color: "#9aa1ad",
                     fontWeight: 600,
                     textTransform: "uppercase",
                     letterSpacing: "0.07em",
@@ -294,12 +294,12 @@ export default function AuthScreen() {
                     style={{
                       width: "100%",
                       padding: "11px 14px",
-                      background: "#0d0d0d",
+                      background: "#0b0d11",
                       border: "1px solid rgba(255,255,255,0.08)",
                       borderRadius: 10,
-                      color: "#f0f0f0",
+                      color: "#e6e8ec",
                       fontSize: 14,
-                      fontFamily: "'Sora', sans-serif",
+                      fontFamily: "'Inter', sans-serif",
                       outline: "none",
                       boxSizing: "border-box",
                     }}
@@ -314,22 +314,22 @@ export default function AuthScreen() {
                 <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
                   <label style={{
                     fontSize: 11,
-                    color: "#888",
+                    color: "#9aa1ad",
                     fontWeight: 600,
                     textTransform: "uppercase",
                     letterSpacing: "0.07em",
                     marginBottom: 6,
-                  }}>Display Name <span style={{ color: "#666", fontWeight: 400 }}>(optional)</span></label>
+                  }}>Display Name <span style={{ color: "#6a7280", fontWeight: 400 }}>(optional)</span></label>
                   <input
                     style={{
                       width: "100%",
                       padding: "11px 14px",
-                      background: "#0d0d0d",
+                      background: "#0b0d11",
                       border: "1px solid rgba(255,255,255,0.08)",
                       borderRadius: 10,
-                      color: "#f0f0f0",
+                      color: "#e6e8ec",
                       fontSize: 14,
-                      fontFamily: "'Sora', sans-serif",
+                      fontFamily: "'Inter', sans-serif",
                       outline: "none",
                       boxSizing: "border-box",
                     }}
@@ -346,7 +346,7 @@ export default function AuthScreen() {
             <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
               <label style={{
                 fontSize: 11,
-                color: "#888",
+                color: "#9aa1ad",
                 fontWeight: 600,
                 textTransform: "uppercase",
                 letterSpacing: "0.07em",
@@ -356,12 +356,12 @@ export default function AuthScreen() {
                 style={{
                   width: "100%",
                   padding: "11px 14px",
-                  background: "#0d0d0d",
+                  background: "#0b0d11",
                   border: "1px solid rgba(255,255,255,0.08)",
                   borderRadius: 10,
-                  color: "#f0f0f0",
+                  color: "#e6e8ec",
                   fontSize: 14,
-                  fontFamily: "'Sora', sans-serif",
+                  fontFamily: "'Inter', sans-serif",
                   outline: "none",
                   boxSizing: "border-box",
                 }}
@@ -380,7 +380,7 @@ export default function AuthScreen() {
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                   <label style={{
                     fontSize: 11,
-                    color: "#888",
+                    color: "#9aa1ad",
                     fontWeight: 600,
                     textTransform: "uppercase",
                     letterSpacing: "0.07em",
@@ -393,11 +393,11 @@ export default function AuthScreen() {
                       style={{
                         background: "none",
                         border: "none",
-                        color: "hsl(119,99%,46%)",
+                        color: "hsl(226,72%,70%)",
                         fontSize: 11,
                         cursor: "pointer",
                         padding: 0,
-                        fontFamily: "'Sora', sans-serif",
+                        fontFamily: "'Inter', sans-serif",
                       }}
                     >
                       Forgot?
@@ -410,12 +410,12 @@ export default function AuthScreen() {
                     style={{
                       width: "100%",
                       padding: "11px 40px 11px 14px",
-                      background: "#0d0d0d",
+                      background: "#0b0d11",
                       border: "1px solid rgba(255,255,255,0.08)",
                       borderRadius: 10,
-                      color: "#f0f0f0",
+                      color: "#e6e8ec",
                       fontSize: 14,
-                      fontFamily: "'Sora', sans-serif",
+                      fontFamily: "'Inter', sans-serif",
                       outline: "none",
                       boxSizing: "border-box",
                     }}
@@ -436,7 +436,7 @@ export default function AuthScreen() {
                       transform: "translateY(-50%)",
                       background: "none",
                       border: "none",
-                      color: "#888",
+                      color: "#9aa1ad",
                       fontSize: 14,
                       cursor: "pointer",
                       padding: 4,
@@ -446,7 +446,7 @@ export default function AuthScreen() {
                     }}
                     title={showPassword ? "Hide password" : "Show password"}
                   >
-                    {showPassword ? "🙈" : "👁️"}
+                    {showPassword ? <Icon name="eyeOff" /> : <Icon name="eye" />}
                   </button>
                 </div>
               </div>
@@ -459,7 +459,7 @@ export default function AuthScreen() {
                 background: "rgba(248,113,113,0.1)",
                 border: "1px solid rgba(248,113,113,0.25)",
                 borderRadius: 8,
-                color: "#f87171",
+                color: "#ef8a8a",
                 fontSize: 13,
                 lineHeight: 1.5,
               }}>{authError}</div>
@@ -469,10 +469,10 @@ export default function AuthScreen() {
             {authSuccess && (
               <div style={{
                 padding: "10px 14px",
-                background: "rgba(34,197,94,0.1)",
-                border: "1px solid rgba(34,197,94,0.3)",
+                background: "rgba(79,185,135,0.1)",
+                border: "1px solid rgba(79,185,135,0.3)",
                 borderRadius: 8,
-                color: "hsl(119,99%,46%)",
+                color: "hsl(226,72%,70%)",
                 fontSize: 13,
                 lineHeight: 1.5,
               }}>{authSuccess}</div>
@@ -481,7 +481,7 @@ export default function AuthScreen() {
             {/* Signup hint */}
             {authMode === "signup" && !authSuccess && (
               <p style={{
-                color: "#888",
+                color: "#9aa1ad",
                 fontSize: 12,
                 margin: 0,
                 lineHeight: 1.5,
@@ -490,7 +490,7 @@ export default function AuthScreen() {
                 borderRadius: 8,
                 border: "1px solid rgba(255,255,255,0.06)",
               }}>
-                ✉️ A confirmation link may be emailed to verify your account upon signup.
+                A confirmation link may be emailed to verify your account upon signup.
               </p>
             )}
 
@@ -502,18 +502,18 @@ export default function AuthScreen() {
                 padding: "13px 0",
                 background: authLoading
                   ? "rgba(255,255,255,0.06)"
-                  : "linear-gradient(135deg, hsl(119,99%,46%) 0%, hsl(119,99%,38%) 100%)",
+                  : "linear-gradient(135deg, hsl(226,72%,70%) 0%, hsl(226,62%,58%) 100%)",
                 border: "none",
                 borderRadius: 10,
                 fontWeight: 700,
                 fontSize: 14,
                 cursor: authLoading ? "not-allowed" : "pointer",
-                color: authLoading ? "#888" : "#0a0a0a",
+                color: authLoading ? "#9aa1ad" : "#0a0a0a",
                 marginTop: 4,
-                fontFamily: "'Sora', sans-serif",
+                fontFamily: "'Inter', sans-serif",
                 letterSpacing: "0.01em",
                 transition: "opacity 0.15s, transform 0.12s",
-                boxShadow: authLoading ? "none" : "0 4px 24px hsla(119,99%,46%,0.25)",
+                boxShadow: authLoading ? "none" : "0 4px 24px hsla(226,72%,70%,0.25)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -526,7 +526,7 @@ export default function AuthScreen() {
                     width: 14,
                     height: 14,
                     borderRadius: "50%",
-                    border: "2px solid #888",
+                    border: "2px solid #9aa1ad",
                     borderTopColor: "transparent",
                     display: "inline-block",
                     animation: "spin 0.7s linear infinite",

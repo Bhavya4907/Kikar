@@ -55,7 +55,6 @@ export default function CreateServerModal({ onClose, onCreateServer, userId }: P
         position: "fixed",
         inset: 0,
         background: "rgba(0, 0, 0, 0.75)",
-        backdropFilter: "blur(8px)",
         zIndex: 2000,
         display: "flex",
         alignItems: "center",
@@ -67,7 +66,7 @@ export default function CreateServerModal({ onClose, onCreateServer, userId }: P
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          background: "#313338",
+          background: "#1e232b",
           borderRadius: 16,
           maxWidth: 440,
           width: "100%",
@@ -77,8 +76,8 @@ export default function CreateServerModal({ onClose, onCreateServer, userId }: P
         }}
       >
         <div style={{ textAlign: "center", marginBottom: 20 }}>
-          <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: "#f2f3f5" }}>Create Your Server</h2>
-          <p style={{ margin: "6px 0 0", fontSize: 13, color: "#949ba4" }}>
+          <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: "#eceef2" }}>Create Your Server</h2>
+          <p style={{ margin: "6px 0 0", fontSize: 13, color: "#9aa1ad" }}>
             Your server is where you, your friends, and your AI personas can hang out.
           </p>
         </div>
@@ -86,7 +85,7 @@ export default function CreateServerModal({ onClose, onCreateServer, userId }: P
         <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           {/* Pick Emoji Icon */}
           <div>
-            <label style={{ fontSize: 11, fontWeight: 700, color: "#b5bac1", textTransform: "uppercase" }}>
+            <label style={{ fontSize: 11, fontWeight: 700, color: "#aab1bc", textTransform: "uppercase" }}>
               SERVER ICON
             </label>
             <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
@@ -99,8 +98,8 @@ export default function CreateServerModal({ onClose, onCreateServer, userId }: P
                     width: 38,
                     height: 38,
                     borderRadius: 10,
-                    background: selectedIcon === icon ? "hsl(119, 99%, 46%)" : "#2b2d31",
-                    border: selectedIcon === icon ? "2px solid #ffffff" : "1px solid rgba(255,255,255,0.08)",
+                    background: selectedIcon === icon ? "hsl(226, 72%, 70%)" : "#161a20",
+                    border: selectedIcon === icon ? "2px solid #f4f5f7" : "1px solid rgba(255,255,255,0.08)",
                     fontSize: 18,
                     cursor: "pointer",
                   }}
@@ -113,7 +112,7 @@ export default function CreateServerModal({ onClose, onCreateServer, userId }: P
 
           {/* Server Name Input */}
           <div>
-            <label style={{ fontSize: 11, fontWeight: 700, color: "#b5bac1", textTransform: "uppercase" }}>
+            <label style={{ fontSize: 11, fontWeight: 700, color: "#aab1bc", textTransform: "uppercase" }}>
               SERVER NAME
             </label>
             <input
@@ -125,10 +124,10 @@ export default function CreateServerModal({ onClose, onCreateServer, userId }: P
                 width: "100%",
                 marginTop: 6,
                 padding: "10px 14px",
-                background: "#1e1f22",
+                background: "#0f1115",
                 border: "1px solid rgba(255,255,255,0.1)",
                 borderRadius: 8,
-                color: "#f2f3f5",
+                color: "#eceef2",
                 fontSize: 14,
                 outline: "none",
                 fontFamily: T.font,
@@ -139,7 +138,7 @@ export default function CreateServerModal({ onClose, onCreateServer, userId }: P
 
           {/* Template Choice */}
           <div>
-            <label style={{ fontSize: 11, fontWeight: 700, color: "#b5bac1", textTransform: "uppercase" }}>
+            <label style={{ fontSize: 11, fontWeight: 700, color: "#aab1bc", textTransform: "uppercase" }}>
               CHOOSE A TEMPLATE
             </label>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 6 }}>
@@ -154,9 +153,9 @@ export default function CreateServerModal({ onClose, onCreateServer, userId }: P
                   style={{
                     padding: "10px",
                     borderRadius: 8,
-                    background: selectedTemplate === tmpl.id ? "rgba(168, 85, 247, 0.2)" : "#2b2d31",
-                    border: selectedTemplate === tmpl.id ? "1.5px solid #a855f7" : "1px solid rgba(255,255,255,0.06)",
-                    color: selectedTemplate === tmpl.id ? "#ffffff" : "#dbdee1",
+                    background: selectedTemplate === tmpl.id ? "rgba(139,124,246, 0.2)" : "#161a20",
+                    border: selectedTemplate === tmpl.id ? "1.5px solid #8b7cf6" : "1px solid rgba(255,255,255,0.06)",
+                    color: selectedTemplate === tmpl.id ? "#f4f5f7" : "#d5d9e0",
                     display: "flex",
                     alignItems: "center",
                     gap: 8,
@@ -181,7 +180,7 @@ export default function CreateServerModal({ onClose, onCreateServer, userId }: P
               style={{
                 background: "transparent",
                 border: "none",
-                color: "#dbdee1",
+                color: "#d5d9e0",
                 fontSize: 14,
                 cursor: "pointer",
                 fontWeight: 600,
@@ -195,7 +194,7 @@ export default function CreateServerModal({ onClose, onCreateServer, userId }: P
               style={{
                 padding: "10px 24px",
                 borderRadius: 8,
-                background: "hsl(119, 99%, 46%)",
+                background: "hsl(226, 72%, 70%)",
                 border: "none",
                 color: "#000",
                 fontSize: 14,

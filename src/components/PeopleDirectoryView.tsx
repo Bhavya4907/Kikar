@@ -2,6 +2,7 @@
 import { useState, useMemo } from "react"
 import { T } from "../styles"
 import type { Profile } from "../lib/types"
+import { Icon } from "./Icons"
 
 interface Props {
   session: any
@@ -82,15 +83,15 @@ export default function PeopleDirectoryView({
             width: 38,
             height: 38,
             borderRadius: 12,
-            background: "rgba(168,85,247,0.14)",
-            border: "1px solid rgba(168,85,247,0.3)",
+            background: "rgba(139,124,246,0.14)",
+            border: "1px solid rgba(139,124,246,0.3)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             fontSize: 20,
-            color: "#c084fc",
+            color: "#b3a8f8",
           }}>
-            👥
+            <Icon name="users" />
           </div>
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -102,8 +103,8 @@ export default function PeopleDirectoryView({
                 alignItems: "center",
                 gap: 5,
                 background: "hsla(142,76%,36%,0.15)",
-                border: "1px solid rgba(34,197,94,0.3)",
-                color: "#22c55e",
+                border: "1px solid rgba(79,185,135,0.3)",
+                color: "#4fb987",
                 fontSize: 11,
                 fontWeight: 700,
                 padding: "2px 8px",
@@ -113,8 +114,8 @@ export default function PeopleDirectoryView({
                   width: 6,
                   height: 6,
                   borderRadius: "50%",
-                  background: "#22c55e",
-                  boxShadow: "0 0 8px #22c55e",
+                  background: "#4fb987",
+                  boxShadow: "0 0 8px #4fb987",
                 }} />
                 {onlineCount} Online
               </span>
@@ -128,7 +129,7 @@ export default function PeopleDirectoryView({
         {/* Search input */}
         <div className="cc-grid-search" style={{ position: "relative" }}>
           <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", fontSize: 13, color: T.muted }}>
-            🔍
+            <Icon name="search" />
           </span>
           <input
             value={searchQuery}
@@ -162,7 +163,7 @@ export default function PeopleDirectoryView({
                 fontSize: 13,
               }}
             >
-              ✕
+              
             </button>
           )}
         </div>
@@ -179,7 +180,7 @@ export default function PeopleDirectoryView({
               background: "linear-gradient(135deg, rgba(56,189,248,0.18) 0%, rgba(14,165,233,0.1) 100%)",
               border: "1px solid rgba(56,189,248,0.4)",
               borderRadius: 10,
-              color: "#38bdf8",
+              color: "#62b5d9",
               fontWeight: 700,
               fontSize: 12,
               cursor: "pointer",
@@ -187,7 +188,7 @@ export default function PeopleDirectoryView({
               flexShrink: 0,
             }}
           >
-            <span>⚡</span>
+            <span><Icon name="radar" /></span>
             <span>Omegle Radar</span>
           </button>
         )}
@@ -196,10 +197,10 @@ export default function PeopleDirectoryView({
       {/* ── Filter Tabs ────────────────────────────────────────────── */}
       <div className="cc-filter-tabs">
         {([
-          { id: "online",  label: "🟢 Online Now", count: onlineCount },
-          { id: "chats",   label: "💬 Existing Chats", count: conversations.length },
-          { id: "replica", label: "🪞 Has Digital Replica", count: allProfiles.filter(p => p.auto_replica_enabled).length },
-          { id: "all",     label: "👥 All Fellows", count: allProfiles.length },
+          { id: "online",  label: "Online Now", count: onlineCount },
+          { id: "chats",   label: "Existing Chats", count: conversations.length },
+          { id: "replica", label: "Has Digital Replica", count: allProfiles.filter(p => p.auto_replica_enabled).length },
+          { id: "all",     label: "All Fellows", count: allProfiles.length },
         ] as const).map(tab => (
           <button
             key={tab.id}
@@ -209,8 +210,8 @@ export default function PeopleDirectoryView({
               padding: "9px 14px",
               border: "none",
               background: "transparent",
-              borderBottom: filterTab === tab.id ? "2px solid #a855f7" : "2px solid transparent",
-              color: filterTab === tab.id ? "#c084fc" : T.muted,
+              borderBottom: filterTab === tab.id ? "2px solid #8b7cf6" : "2px solid transparent",
+              color: filterTab === tab.id ? "#b3a8f8" : T.muted,
               fontSize: 12,
               fontWeight: filterTab === tab.id ? 700 : 500,
               cursor: "pointer",
@@ -224,10 +225,10 @@ export default function PeopleDirectoryView({
             <span>{tab.label}</span>
             <span style={{
               fontSize: 10,
-              background: filterTab === tab.id ? "rgba(168,85,247,0.2)" : "rgba(255,255,255,0.06)",
+              background: filterTab === tab.id ? "rgba(139,124,246,0.2)" : "rgba(255,255,255,0.06)",
               padding: "1px 6px",
               borderRadius: 999,
-              color: filterTab === tab.id ? "#c084fc" : T.muted,
+              color: filterTab === tab.id ? "#b3a8f8" : T.muted,
             }}>
               {tab.count}
             </span>
@@ -239,7 +240,7 @@ export default function PeopleDirectoryView({
       <div className="cc-grid-container">
         {filteredProfiles.length === 0 ? (
           <div style={{ gridColumn: "1 / -1", textAlign: "center", padding: "60px 20px" }}>
-            <div style={{ fontSize: 44, marginBottom: 12 }}>👥</div>
+            <div style={{ fontSize: 44, marginBottom: 12 }}><Icon name="users" /></div>
             <h3 style={{ fontSize: 17, color: T.text, fontWeight: 700, margin: "0 0 6px" }}>
               {searchQuery ? "No matching fellows found" : filterTab === "online" ? "No fellows currently online" : "No fellows found"}
             </h3>
@@ -260,7 +261,7 @@ export default function PeopleDirectoryView({
                 key={p.id}
                 style={{
                   background: T.surface,
-                  border: `1px solid ${p.is_online ? "rgba(34,197,94,0.3)" : T.border}`,
+                  border: `1px solid ${p.is_online ? "rgba(79,185,135,0.3)" : T.border}`,
                   borderRadius: 16,
                   padding: "16px 16px 14px",
                   display: "flex",
@@ -268,15 +269,15 @@ export default function PeopleDirectoryView({
                   justifyContent: "space-between",
                   gap: 12,
                   transition: "transform 0.15s, border-color 0.15s, box-shadow 0.15s",
-                  boxShadow: p.is_online ? "0 4px 20px rgba(34,197,94,0.06)" : "none",
+                  boxShadow: p.is_online ? "0 4px 20px rgba(79,185,135,0.06)" : "none",
                 }}
                 onMouseEnter={e => {
                   e.currentTarget.style.transform = "translateY(-3px)"
-                  e.currentTarget.style.borderColor = p.is_online ? "#22c55e" : "#a855f7"
+                  e.currentTarget.style.borderColor = p.is_online ? "#4fb987" : "#8b7cf6"
                 }}
                 onMouseLeave={e => {
                   e.currentTarget.style.transform = "translateY(0)"
-                  e.currentTarget.style.borderColor = p.is_online ? "rgba(34,197,94,0.3)" : T.border
+                  e.currentTarget.style.borderColor = p.is_online ? "rgba(79,185,135,0.3)" : T.border
                 }}
               >
                 <div>
@@ -300,7 +301,7 @@ export default function PeopleDirectoryView({
                           justifyContent: "center",
                           fontSize: 22,
                         }}>
-                          👤
+                          <Icon name="user" />
                         </div>
                       )}
                       {/* Online indicator ring */}
@@ -312,9 +313,9 @@ export default function PeopleDirectoryView({
                           width: 12,
                           height: 12,
                           borderRadius: "50%",
-                          background: p.is_online ? "#22c55e" : "#444444",
+                          background: p.is_online ? "#4fb987" : "#3a414c",
                           border: `2px solid ${T.surface}`,
-                          boxShadow: p.is_online ? "0 0 8px #22c55e" : "none",
+                          boxShadow: p.is_online ? "0 0 8px #4fb987" : "none",
                         }}
                       />
                     </div>
@@ -347,9 +348,9 @@ export default function PeopleDirectoryView({
                   {p.replica_status_note ? (
                     <div style={{
                       fontSize: 11,
-                      color: "#c084fc",
-                      background: "rgba(168,85,247,0.1)",
-                      border: "1px solid rgba(168,85,247,0.22)",
+                      color: "#b3a8f8",
+                      background: "rgba(139,124,246,0.1)",
+                      border: "1px solid rgba(139,124,246,0.22)",
                       borderRadius: 8,
                       padding: "5px 9px",
                       marginBottom: 8,
@@ -358,7 +359,7 @@ export default function PeopleDirectoryView({
                       textOverflow: "ellipsis",
                       whiteSpace: "nowrap",
                     }}>
-                      💬 &quot;{p.replica_status_note}&quot;
+                      &quot;{p.replica_status_note}&quot;
                     </div>
                   ) : null}
 
@@ -383,8 +384,8 @@ export default function PeopleDirectoryView({
                     <span style={{
                       fontSize: 10,
                       fontWeight: 600,
-                      color: p.is_online ? "#22c55e" : T.muted,
-                      background: p.is_online ? "rgba(34,197,94,0.1)" : "rgba(255,255,255,0.05)",
+                      color: p.is_online ? "#4fb987" : T.muted,
+                      background: p.is_online ? "rgba(79,185,135,0.1)" : "rgba(255,255,255,0.05)",
                       padding: "2px 7px",
                       borderRadius: 6,
                     }}>
@@ -399,12 +400,12 @@ export default function PeopleDirectoryView({
                       <span style={{
                         fontSize: 10,
                         fontWeight: 600,
-                        color: "#c084fc",
-                        background: "rgba(168,85,247,0.1)",
+                        color: "#b3a8f8",
+                        background: "rgba(139,124,246,0.1)",
                         padding: "2px 7px",
                         borderRadius: 6,
                       }}>
-                        🪞 Replica Ready
+                        Replica Ready
                       </span>
                     )}
 
@@ -413,12 +414,12 @@ export default function PeopleDirectoryView({
                         fontSize: 10,
                         fontWeight: 700,
                         color: T.primary,
-                        background: "hsla(119,99%,46%,0.12)",
+                        background: "hsla(226,72%,70%,0.12)",
                         padding: "2px 7px",
                         borderRadius: 6,
                         textTransform: "uppercase",
                       }}>
-                        ⚡ {p.plan_tier}
+                        {p.plan_tier}
                       </span>
                     )}
                   </div>
@@ -432,11 +433,11 @@ export default function PeopleDirectoryView({
                     width: "100%",
                     padding: "9px 12px",
                     background: hasExisting
-                      ? "rgba(168,85,247,0.15)"
-                      : "linear-gradient(135deg, hsl(119,99%,46%) 0%, hsl(119,99%,38%) 100%)",
-                    border: hasExisting ? "1px solid rgba(168,85,247,0.35)" : "none",
+                      ? "rgba(139,124,246,0.15)"
+                      : "linear-gradient(135deg, hsl(226,72%,70%) 0%, hsl(226,62%,58%) 100%)",
+                    border: hasExisting ? "1px solid rgba(139,124,246,0.35)" : "none",
                     borderRadius: 9,
-                    color: hasExisting ? "#c084fc" : T.primaryFg,
+                    color: hasExisting ? "#b3a8f8" : T.primaryFg,
                     fontSize: 12,
                     fontWeight: 700,
                     cursor: "pointer",
@@ -450,7 +451,7 @@ export default function PeopleDirectoryView({
                   onMouseEnter={e => (e.currentTarget.style.opacity = "0.9")}
                   onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
                 >
-                  <span>{hasExisting ? "💬 Open Chat" : "✦ Connect & Message"}</span>
+                  <span>{hasExisting ? "Open Chat" : "Connect & Message"}</span>
                   <span style={{ fontSize: 13 }}>→</span>
                 </button>
               </div>

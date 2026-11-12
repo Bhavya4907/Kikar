@@ -1,65 +1,88 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI } from "@google/genai"
+import { getAuthedUser, getSupabaseAdmin, isProduction, corsHeadersFor } from "../../../src/lib/serverAuth.js"
+import { checkRateLimit } from "../../../src/lib/rateLimit.js"
+
+const MAX_PROMPT_CHARS = 1000
+
+const imageModels = () => {
+  const raw = (process.env.GEMINI_IMAGE_MODELS || "").split(",").map((s) => s.trim()).filter(Boolean)
+  return raw.length ? raw : ["gemini-2.5-flash-image", "gemini-3.1-flash-image-preview"]
+}
+
+export async function OPTIONS(request) {
+  return new Response(null, { status: 204, headers: corsHeadersFor(request) })
+}
 
 export async function POST(request) {
-  const apiKey = (process.env.GEMINI_API_KEY && !process.env.GEMINI_API_KEY.includes("your_"))
-    ? process.env.GEMINI_API_KEY
-    : (process.env.GOOGLE_API_KEY && !process.env.GOOGLE_API_KEY.includes("your_"))
-      ? process.env.GOOGLE_API_KEY
-      : "";
-  
-  if (!apiKey) {
-    return Response.json(
-      { error: "Gemini API key is not configured. Please set GEMINI_API_KEY (or GOOGLE_API_KEY) in .env.local" },
-      { status: 500 }
-    );
-  }
-
-  const ai = new GoogleGenAI({ apiKey });
+  const cors = corsHeadersFor(request)
+  const json = (body, status = 200) => Response.json(body, { status, headers: cors })
 
   try {
-    const { prompt } = await request.json();
+    const user = await getAuthedUser(request)
+    if (!user) return json({ error: "Please sign in again to generate images." }, 401)
+    const userId = user.id
 
-    if (!prompt) {
-      return Response.json({ error: "Prompt is required" }, { status: 400 });
+    if (!checkRateLimit(`img:${userId}`, 6, 60 * 1000)) {
+      return json({ error: "You're generating images too quickly. Please wait a moment." }, 429)
     }
 
-    const imageModels = [
-      "gemini-2.5-flash-image",
-      "gemini-3-pro-image",
-      "gemini-3.1-flash-image-preview",
-    ];
+    const apiKey =
+      process.env.GEMINI_API_KEY && !process.env.GEMINI_API_KEY.includes("your_")
+        ? process.env.GEMINI_API_KEY
+        : process.env.GOOGLE_API_KEY && !process.env.GOOGLE_API_KEY.includes("your_")
+          ? process.env.GOOGLE_API_KEY
+          : ""
+    if (!apiKey) {
+      return json({ error: "Image generation is not configured on the server." }, 500)
+    }
 
-    let lastError = null;
+    const body = await request.json().catch(() => ({}))
+    const prompt = String(body.prompt || "").trim().slice(0, MAX_PROMPT_CHARS)
+    if (!prompt) return json({ error: "Prompt is required" }, 400)
 
-    for (const model of imageModels) {
+    // Atomic monthly image quota
+    const admin = getSupabaseAdmin()
+    let quotaConsumed = false
+    if (admin) {
+      const { data: rows, error: quotaError } = await admin.rpc("consume_image_quota", { p_user: userId })
+      if (quotaError) {
+        console.error("consume_image_quota failed (did you run supabase-migration-v5-security.sql?):", quotaError.message)
+        if (isProduction()) return json({ error: "Image generation is temporarily unavailable." }, 503)
+      } else {
+        const row = Array.isArray(rows) ? rows[0] : rows
+        if (!row?.allowed) {
+          return json({ error: "You've used all image generations for this month on your plan.", code: "QUOTA_EXCEEDED" }, 429)
+        }
+        quotaConsumed = true
+      }
+    } else if (isProduction()) {
+      return json({ error: "Image generation is temporarily unavailable." }, 500)
+    }
+
+    const ai = new GoogleGenAI({ apiKey })
+    for (const model of imageModels()) {
       try {
-        const response = await ai.models.generateContent({
-          model,
-          contents: prompt,
-        });
-
+        const response = await ai.models.generateContent({ model, contents: prompt })
         if (response.parts) {
           for (const part of response.parts) {
             if (part.inlineData) {
-              const base64 = part.inlineData.data;
-              const mimeType = part.inlineData.mimeType || "image/png";
-              const url = `data:${mimeType};base64,${base64}`;
-              return Response.json({ url });
+              const mimeType = part.inlineData.mimeType || "image/png"
+              return json({ url: `data:${mimeType};base64,${part.inlineData.data}` })
             }
           }
         }
       } catch (err) {
-        lastError = err;
-        console.warn(`Image model ${model} failed, trying next:`, err?.message || err);
+        console.warn(`Image model ${model} failed, trying next:`, err?.message || err)
       }
     }
 
-    return Response.json(
-      { error: lastError?.message || "No image returned from model" },
-      { status: 500 }
-    );
+    if (quotaConsumed && admin) {
+      const { error } = await admin.rpc("refund_image_quota", { p_user: userId })
+      if (error) console.warn("refund_image_quota failed:", error.message)
+    }
+    return json({ error: "Couldn't generate an image right now. Please try again." }, 502)
   } catch (error) {
-    console.error("Gemini image error:", error?.message || error);
-    return Response.json({ error: error?.message || "Failed to generate image" }, { status: 500 });
+    console.error("Gemini image error:", error?.message || error)
+    return json({ error: "Failed to generate image" }, 500)
   }
 }

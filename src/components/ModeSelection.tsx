@@ -1,4 +1,5 @@
 import { T, S } from "../styles"
+import { Icon } from "./Icons"
 
 interface Props {
   onSelect: (mode: "ai" | "people" | "radar") => void
@@ -45,8 +46,8 @@ export default function ModeSelection({ onSelect }: Props) {
             el.style.boxShadow = "none"
           }}
         >
-          <div style={{ ...S.modeIconWrap, width: 56, height: 56, fontSize: 28, background: "hsla(119,99%,46%,0.15)", color: T.primary }}>
-            ✦
+          <div style={{ ...S.modeIconWrap, width: 56, height: 56, fontSize: 28, background: "hsla(226,72%,70%,0.15)", color: T.primary }}>
+            <Icon name="spark" />
           </div>
           <div style={{ textAlign: "center" }}>
             <h3 style={{ fontSize: 18, fontWeight: 700, color: T.text, marginBottom: 6 }}>Persona Mode</h3>
@@ -77,8 +78,8 @@ export default function ModeSelection({ onSelect }: Props) {
             el.style.boxShadow = "none"
           }}
         >
-          <div style={{ ...S.modeIconWrap, width: 56, height: 56, fontSize: 28, background: "rgba(168,85,247,0.15)", color: "#a855f7" }}>
-            👥
+          <div style={{ ...S.modeIconWrap, width: 56, height: 56, fontSize: 28, background: "rgba(139,124,246,0.15)", color: "#8b7cf6" }}>
+            <Icon name="users" />
           </div>
           <div style={{ textAlign: "center" }}>
             <h3 style={{ fontSize: 18, fontWeight: 700, color: T.text, marginBottom: 6 }}>Fellows Mode</h3>
@@ -99,7 +100,7 @@ export default function ModeSelection({ onSelect }: Props) {
           onMouseEnter={e => {
             const el = e.currentTarget
             el.style.transform = "translateY(-4px)"
-            el.style.borderColor = "#38bdf8"
+            el.style.borderColor = "#62b5d9"
             el.style.boxShadow = "0 16px 40px rgba(56,189,248,0.2)"
           }}
           onMouseLeave={e => {
@@ -109,8 +110,8 @@ export default function ModeSelection({ onSelect }: Props) {
             el.style.boxShadow = "none"
           }}
         >
-          <div style={{ ...S.modeIconWrap, width: 56, height: 56, fontSize: 28, background: "rgba(56,189,248,0.15)", color: "#38bdf8" }}>
-            ⚡
+          <div style={{ ...S.modeIconWrap, width: 56, height: 56, fontSize: 28, background: "rgba(56,189,248,0.15)", color: "#62b5d9" }}>
+            <Icon name="radar" />
           </div>
           <div style={{ textAlign: "center" }}>
             <h3 style={{ fontSize: 18, fontWeight: 700, color: T.text, marginBottom: 6 }}>Radar Match</h3>

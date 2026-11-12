@@ -1,49 +1,51 @@
 @import "tailwindcss";
 
-/* ── SENTINEL AI / KIKAR AI Theme & Tokens ───────────────────────── */
+/* ── KIKAR Theme & Tokens ─────────────────────────────────────────────
+   Near-black cool grays (no pure black), layered surfaces, one desaturated
+   indigo accent, off-white text. Status colors are separate and muted. */
 :root {
-  --background: 0 0% 10%;
-  --foreground: 0 0% 96%;
-  --primary: 119 99% 46%;
-  --primary-foreground: 0 0% 4%;
-  --secondary: 0 0% 18%;
-  --secondary-foreground: 0 0% 96%;
-  --muted: 0 0% 16%;
-  --muted-foreground: 0 0% 60%;
-  --accent: 119 99% 46%;
-  --accent-foreground: 0 0% 4%;
-  --destructive: 0 84% 60%;
-  --border: 0 0% 20%;
-  --input: 0 0% 20%;
-  --ring: 119 99% 46%;
+  --background: 220 17% 7%;
+  --foreground: 220 14% 91%;
+  --primary: 226 72% 70%;
+  --primary-foreground: 222 20% 6%;
+  --secondary: 220 15% 14%;
+  --secondary-foreground: 220 14% 91%;
+  --muted: 220 15% 12%;
+  --muted-foreground: 218 11% 65%;
+  --accent: 226 72% 70%;
+  --accent-foreground: 222 20% 6%;
+  --destructive: 0 70% 66%;
+  --border: 220 12% 17%;
+  --input: 220 12% 17%;
+  --ring: 226 72% 70%;
   --radius: 0.5rem;
-  --nav-button: 0 0% 18%;
-  --hero-bg: 0 0% 8%;
+  --nav-button: 220 15% 14%;
+  --hero-bg: 220 17% 7%;
 
   /* Color shortcuts */
-  --bg: #111111;
-  --bg-alt: #0d0d0d;
-  --surface: #1c1c1c;
-  --surface-alt: #232323;
-  --surface-glass: rgba(255, 255, 255, 0.04);
-  --border-color: rgba(255, 255, 255, 0.1);
-  --border-hover: rgba(255, 255, 255, 0.2);
-  --primary-color: hsl(119, 99%, 46%);
-  --primary-dim: hsla(119, 99%, 46%, 0.15);
-  --primary-glow: hsla(119, 99%, 46%, 0.25);
-  --purple: #a855f7;
-  --purple-dim: rgba(168, 85, 247, 0.15);
-  --red: #f87171;
-  --text: #f0f0f0;
-  --muted-text: #888888;
-  --muted-2: #555555;
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --radius-xl: 20px;
+  --bg: #0f1115;
+  --bg-alt: #0b0d11;
+  --surface: #161a20;
+  --surface-alt: #1e232b;
+  --surface-glass: rgba(255, 255, 255, 0.035);
+  --border-color: rgba(255, 255, 255, 0.08);
+  --border-hover: rgba(255, 255, 255, 0.16);
+  --primary-color: hsl(226, 72%, 70%);
+  --primary-dim: hsla(226, 72%, 70%, 0.14);
+  --primary-glow: hsla(226, 72%, 70%, 0.25);
+  --purple: #8b7cf6;
+  --purple-dim: rgba(139,124,246, 0.15);
+  --red: #ef8a8a;
+  --text: #e6e8ec;
+  --muted-text: #9aa1ad;
+  --muted-2: #6a7280;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
   --radius-pill: 999px;
   --transition: 0.18s cubic-bezier(0.4, 0, 0.2, 1);
-  --font: 'Sora', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 
   /* Mobile Safe Area Inset Tokens (Punch-hole cameras, notches, gesture pill) */
   --sat: env(safe-area-inset-top, 0px);
@@ -63,7 +65,7 @@ html, body {
   width: 100%;
   margin: 0;
   padding: 0;
-  background: #0d0d0d;
+  background: #0b0d11;
   color: hsl(var(--foreground));
   font-family: var(--font);
   -webkit-font-smoothing: antialiased;
@@ -73,7 +75,6 @@ html, body {
   -webkit-touch-callout: none;
 }
 
-/* Touch Ergonomics: Prevent unwanted text selection on UI controls */
 button, nav, .cc-mobile-bottom-nav, .cc-tab, .cc-back-btn {
   -webkit-user-select: none;
   user-select: none;
@@ -93,8 +94,8 @@ button, nav, .cc-mobile-bottom-nav, .cc-tab, .cc-back-btn {
 
 /* ── Animations ────────────────────────────────────────────────────── */
 @keyframes fade-up {
-  0%   { opacity: 0; transform: translateY(20px); filter: blur(4px); }
-  100% { opacity: 1; transform: translateY(0);    filter: blur(0); }
+  0%   { opacity: 0; transform: translate3d(0, 16px, 0); }
+  100% { opacity: 1; transform: translate3d(0, 0, 0); }
 }
 
 @keyframes fade-in {
@@ -120,98 +121,6 @@ button, nav, .cc-mobile-bottom-nav, .cc-tab, .cc-back-btn {
 @keyframes shimmer {
   from { background-position: -200% center; }
   to   { background-position:  200% center; }
-}
-
-/* ── App Layout (Desktop & Mobile Responsive) ─────────────────────── */
-.cc-app {
-  display: flex;
-  width: 100%;
-  height: 100dvh;
-  background: var(--bg);
-  color: var(--text);
-  font-family: var(--font);
-  overflow: hidden;
-  position: relative;
-}
-
-.cc-sidebar {
-  width: 340px;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  background: var(--surface);
-  border-right: 1px solid var(--border-color);
-  height: 100dvh;
-}
-
-.cc-main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  background: var(--bg-alt);
-  height: 100dvh;
-}
-
-/* ── Mobile Layout (Fixes Blank Screen in AI View & Smooth Drawer in People View) ── */
-@media (max-width: 767px) {
-  .cc-app {
-    position: relative;
-    overflow: hidden;
-    height: 100dvh;
-  }
-
-  /* When in AI Mode (.ai-view), there is no sidebar, so .cc-main must always stay on screen */
-  .cc-app.ai-view .cc-main {
-    position: relative;
-    inset: 0;
-    width: 100%;
-    height: 100dvh;
-    transform: translateX(0) !important;
-  }
-
-  /* When in People Mode (.people-view), toggle smoothly between Sidebar (People list) and Main (DM/Profile) */
-  .cc-app.people-view .cc-sidebar {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100dvh;
-    z-index: 10;
-    transform: translateX(0);
-    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-
-  .cc-app.people-view .cc-main {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100dvh;
-    z-index: 20;
-    transform: translateX(100%);
-    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-
-  .cc-app.people-view.chat-open .cc-sidebar {
-    transform: translateX(-100%);
-    pointer-events: none;
-  }
-
-  .cc-app.people-view.chat-open .cc-main {
-    transform: translateX(0);
-  }
-
-  /* When in Radar Mode (.radar-view), .cc-main is full screen on mobile */
-  .cc-app.radar-view .cc-sidebar {
-    display: none;
-  }
-  .cc-app.radar-view .cc-main {
-    position: relative;
-    inset: 0;
-    width: 100%;
-    height: 100dvh;
-    transform: translateX(0) !important;
-  }
 }
 
 /* ── Responsive Helper Classes for Mobile Phone Screens ───────────── */
@@ -266,9 +175,50 @@ button, nav, .cc-mobile-bottom-nav, .cc-tab, .cc-back-btn {
 }
 .cc-story-strip::-webkit-scrollbar { display: none; }
 
+/* ── Discord Layout & Mobile Off-Canvas Drawer ─────────────────────── */
+.cc-discord-root {
+  font-family: var(--font);
+}
+
+.cc-discord-nav-drawer {
+  display: flex;
+  height: 100%;
+  flex-shrink: 0;
+  z-index: 100;
+}
+
+.cc-discord-mobile-topbar {
+  display: none;
+}
+
+.cc-discord-mobile-menu-btn {
+  display: none !important;
+}
+
+.cc-discord-server-rail::-webkit-scrollbar {
+  display: none;
+}
+
+.cc-discord-channel-list::-webkit-scrollbar,
+.cc-discord-messages-scroll::-webkit-scrollbar,
+.cc-discord-member-list::-webkit-scrollbar {
+  width: 6px;
+}
+.cc-discord-channel-list::-webkit-scrollbar-track,
+.cc-discord-messages-scroll::-webkit-scrollbar-track,
+.cc-discord-member-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+.cc-discord-channel-list::-webkit-scrollbar-thumb,
+.cc-discord-messages-scroll::-webkit-scrollbar-thumb,
+.cc-discord-member-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+}
+
 @media (max-width: 767px) {
   .cc-grid-header {
-    padding: max(12px, calc(env(safe-area-inset-top) + 6px)) 14px 10px;
+    padding: 12px 14px 10px;
     gap: 10px;
   }
   .cc-grid-search {
@@ -278,8 +228,8 @@ button, nav, .cc-mobile-bottom-nav, .cc-tab, .cc-back-btn {
     margin: 0 !important;
   }
   .cc-grid-container {
-    padding: 14px 14px calc(78px + env(safe-area-inset-bottom, 8px));
-    grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+    padding: 14px 14px calc(24px + env(safe-area-inset-bottom, 8px));
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
     gap: 12px;
   }
   .cc-filter-tabs {
@@ -288,32 +238,46 @@ button, nav, .cc-mobile-bottom-nav, .cc-tab, .cc-back-btn {
   .cc-story-strip {
     padding: 10px 14px;
   }
-  .cc-charlist {
-    padding-bottom: calc(78px + env(safe-area-inset-bottom, 8px));
-  }
-  .cc-sidebar {
-    padding-bottom: calc(72px + env(safe-area-inset-bottom, 8px));
-  }
-  .cc-pricing-dialog {
-    padding: 18px 14px !important;
-    max-height: 94dvh !important;
-    border-radius: 16px !important;
-  }
-  /* Prevent iOS Safari and Android WebView auto-zoom on input focus */
   input, select, textarea {
     font-size: 16px !important;
-  }
-  .cc-mobile-bottom-nav {
-    display: flex !important;
   }
   .hide-on-mobile {
     display: none !important;
   }
-}
 
-@media (min-width: 768px) {
-  .cc-mobile-bottom-nav {
-    display: none !important;
+  /* On mobile phones, ServerRail + ChannelSidebar slide in as an off-canvas drawer so main chat gets 100% width */
+  .cc-discord-nav-drawer {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    transform: translateX(-100%);
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 12px 0 36px rgba(0, 0, 0, 0.8);
+  }
+  .cc-discord-nav-drawer.drawer-open {
+    transform: translateX(0);
+  }
+  .cc-discord-mobile-topbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: max(8px, env(safe-area-inset-top, 8px)) 12px 8px;
+    background: #12151a;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    flex-shrink: 0;
+  }
+  .cc-discord-mobile-menu-btn {
+    display: flex !important;
+  }
+  .cc-discord-member-list {
+    position: absolute !important;
+    right: 0 !important;
+    top: 48px !important;
+    bottom: 0 !important;
+    z-index: 50 !important;
+    box-shadow: -8px 0 24px rgba(0, 0, 0, 0.75) !important;
+    background: #0b0d11 !important;
   }
 }
 
@@ -342,7 +306,7 @@ button, nav, .cc-mobile-bottom-nav, .cc-tab, .cc-back-btn {
 .typing-dot:nth-child(3) { animation-delay: 0.4s; }
 
 .animate-fade-up {
-  animation: fade-up 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: fade-up 0.55s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 .animate-fade-in {
   animation: fade-in 0.5s ease-out forwards;
@@ -355,51 +319,73 @@ button, nav, .cc-mobile-bottom-nav, .cc-tab, .cc-back-btn {
   border-radius: var(--radius-md);
 }
 
-/* ── Discord Layout Styling & Custom Scrollbars ────────────────────── */
-.cc-discord-root {
-  font-family: var(--font);
+
+/* ── Landing hero: lightweight background + CTA ───────────────────── */
+.kikar-orb {
+  position: absolute;
+  border-radius: 50%;
+  /* radial-gradient fades to transparent on its own, so no blur() filter is needed */
+  will-change: transform;
+}
+.kikar-orb-green {
+  width: 70vmax; height: 70vmax;
+  top: -25vmax; left: 50%;
+  margin-left: -35vmax;
+  background: radial-gradient(circle, hsla(226, 72%, 70%, 0.16) 0%, transparent 62%);
+  animation: orb-drift-a 18s ease-in-out infinite alternate;
+}
+.kikar-orb-purple {
+  width: 60vmax; height: 60vmax;
+  bottom: -30vmax; right: -15vmax;
+  background: radial-gradient(circle, rgba(139,124,246, 0.14) 0%, transparent 62%);
+  animation: orb-drift-b 22s ease-in-out infinite alternate;
+}
+.kikar-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.035) 1px, transparent 1px);
+  background-size: 56px 56px;
+  -webkit-mask-image: radial-gradient(ellipse at 50% 40%, #000 0%, transparent 70%);
+          mask-image: radial-gradient(ellipse at 50% 40%, #000 0%, transparent 70%);
+}
+@keyframes orb-drift-a {
+  from { transform: translate3d(-4%, 0, 0); }
+  to   { transform: translate3d(4%, 6%, 0); }
+}
+@keyframes orb-drift-b {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(-8%, -6%, 0); }
 }
 
-.cc-discord-server-rail::-webkit-scrollbar {
-  display: none;
+.kikar-cta {
+  box-shadow: 0 0 0 1px hsla(226, 72%, 70%, 0.5), 0 8px 32px hsla(226, 72%, 70%, 0.28);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease, filter 0.2s ease;
+}
+.kikar-cta:hover  { transform: translateY(-2px); filter: brightness(1.08);
+                    box-shadow: 0 0 0 1px hsla(226, 72%, 70%, 0.7), 0 12px 40px hsla(226, 72%, 70%, 0.4); }
+.kikar-cta:active { transform: translateY(0) scale(0.97); }
+
+/* ── General smoothness ───────────────────────────────────────────── */
+html { scroll-behavior: smooth; }
+
+/* skip rendering of off-screen chat bubbles; big win in long conversations */
+.cc-bubble { content-visibility: auto; contain-intrinsic-size: auto 48px; }
+
+button, a, input, textarea, select {
+  transition-property: background-color, border-color, color, opacity, box-shadow, transform;
+  transition-duration: 0.15s;
+  transition-timing-function: ease;
 }
 
-.cc-discord-channel-list::-webkit-scrollbar,
-.cc-discord-messages-scroll::-webkit-scrollbar,
-.cc-discord-member-list::-webkit-scrollbar {
-  width: 6px;
-}
-.cc-discord-channel-list::-webkit-scrollbar-track,
-.cc-discord-messages-scroll::-webkit-scrollbar-track,
-.cc-discord-member-list::-webkit-scrollbar-track {
-  background: transparent;
-}
-.cc-discord-channel-list::-webkit-scrollbar-thumb,
-.cc-discord-messages-scroll::-webkit-scrollbar-thumb,
-.cc-discord-member-list::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
-  border-radius: 4px;
-}
-.cc-discord-channel-list::-webkit-scrollbar-thumb:hover,
-.cc-discord-messages-scroll::-webkit-scrollbar-thumb:hover,
-.cc-discord-member-list::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
-}
+:focus-visible { outline: 2px solid hsla(226, 72%, 70%, 0.7); outline-offset: 2px; }
 
-@media (max-width: 767px) {
-  .cc-discord-server-rail {
-    width: 58px !important;
-  }
-  .cc-discord-channel-sidebar {
-    width: 180px !important;
-  }
-  .cc-discord-member-list {
-    position: absolute !important;
-    right: 0 !important;
-    top: 48px !important;
-    bottom: 0 !important;
-    z-index: 50 !important;
-    box-shadow: -8px 0 24px rgba(0, 0, 0, 0.75) !important;
-    background: #111214 !important;
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

@@ -1,62 +1,45 @@
 .electric-border {
-  --electric-light-color: oklch(from var(--electric-border-color, #5227FF) l c h);
   position: relative;
-  border-radius: inherit;
-  overflow: visible;
   isolation: isolate;
-}
-
-.eb-canvas-container {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-  z-index: 2;
-}
-
-.eb-canvas {
-  display: block;
+  border-radius: inherit;
 }
 
 .eb-content {
   position: relative;
-  border-radius: inherit;
   z-index: 1;
+  border-radius: inherit;
 }
 
-.eb-layers {
+/* thin crisp edge on top of the content */
+.eb-ring {
   position: absolute;
   inset: 0;
+  z-index: 2;
   border-radius: inherit;
   pointer-events: none;
+  border: 1px solid color-mix(in srgb, var(--eb-color) 55%, transparent);
+}
+
+/* soft glow behind the content; only opacity animates (GPU friendly) */
+.eb-glow {
+  position: absolute;
+  inset: 0;
   z-index: 0;
-}
-
-.eb-glow-1,
-.eb-glow-2,
-.eb-background-glow {
-  position: absolute;
-  inset: 0;
   border-radius: inherit;
   pointer-events: none;
-  box-sizing: border-box;
+  box-shadow:
+    0 0 26px color-mix(in srgb, var(--eb-color) 30%, transparent),
+    inset 0 0 16px color-mix(in srgb, var(--eb-color) 10%, transparent);
+  opacity: 0.6;
+  animation: eb-breathe 3.4s ease-in-out infinite;
+  will-change: opacity;
 }
 
-.eb-glow-1 {
-  border: 2px solid oklch(from var(--electric-border-color, #5227FF) l c h / 0.6);
-  filter: blur(1px);
+@keyframes eb-breathe {
+  0%, 100% { opacity: 0.45; }
+  50%      { opacity: 1; }
 }
 
-.eb-glow-2 {
-  border: 2px solid var(--electric-light-color);
-  filter: blur(4px);
-}
-
-.eb-background-glow {
-  z-index: -1;
-  transform: scale(1.1);
-  filter: blur(32px);
-  opacity: 0.3;
-  background: linear-gradient(-30deg, var(--electric-light-color), transparent, var(--electric-border-color));
+@media (prefers-reduced-motion: reduce) {
+  .eb-glow { animation: none; opacity: 0.7; }
 }

@@ -2,6 +2,7 @@
 import { useState } from "react"
 import { T, S } from "../styles"
 import type { PlanTier } from "../lib/types"
+import { Icon } from "./Icons"
 
 interface Props {
   characters: any[]
@@ -132,7 +133,7 @@ export default function AIGridView({
                       fontSize: 12,
                     }}
                   >
-                    ✏️
+                    <Icon name="edit" />
                   </button>
                 )}
 
@@ -155,7 +156,7 @@ export default function AIGridView({
                       fontSize: 12,
                     }}
                   >
-                    🗑️
+                    <Icon name="trash" />
                   </button>
                 )}
               </div>
@@ -165,16 +166,16 @@ export default function AIGridView({
           <div>
             <div style={{ ...S.botName, fontSize: 15 }}>{c.name}</div>
             {c.is_replica ? (
-              <div style={{ fontSize: 11, color: "#a855f7", marginTop: 2, fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
-                <span>🪞</span> Replica
+              <div style={{ fontSize: 11, color: "#8b7cf6", marginTop: 2, fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
+                <span><Icon name="twin" /></span> Replica
               </div>
             ) : isOwner ? (
               <div style={{ fontSize: 11, color: T.primary, marginTop: 2, fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
-                <span>✦</span> {c.is_public ? "Public" : "Private"}
+                <span><Icon name="spark" /></span> {c.is_public ? "Public" : "Private"}
               </div>
             ) : (
               <div style={{ fontSize: 11, color: T.muted, marginTop: 2, fontWeight: 500 }}>
-                🌍 Community
+                Community
               </div>
             )}
           </div>
@@ -220,10 +221,10 @@ export default function AIGridView({
               alignItems: "center",
               gap: 6,
               padding: "8px 12px",
-              background: "rgba(168,85,247,0.12)",
-              border: "1px solid rgba(168,85,247,0.35)",
+              background: "rgba(139,124,246,0.12)",
+              border: "1px solid rgba(139,124,246,0.35)",
               borderRadius: 10,
-              color: "#c084fc",
+              color: "#b3a8f8",
               fontWeight: 600,
               fontSize: 13,
               cursor: "pointer",
@@ -245,14 +246,14 @@ export default function AIGridView({
               background: "rgba(56,189,248,0.12)",
               border: "1px solid rgba(56,189,248,0.35)",
               borderRadius: 10,
-              color: "#38bdf8",
+              color: "#62b5d9",
               fontWeight: 600,
               fontSize: 13,
               cursor: "pointer",
               fontFamily: T.font,
             }}
           >
-            <span>⚡</span>
+            <span><Icon name="radar" /></span>
             <span>Radar</span>
           </button>
         </div>
@@ -287,10 +288,10 @@ export default function AIGridView({
               style={{
                 padding: "0 10px",
                 height: 34,
-                background: planTier === "free" ? "rgba(168,85,247,0.14)" : "hsla(119,99%,46%,0.14)",
-                border: planTier === "free" ? "1px solid rgba(168,85,247,0.4)" : `1px solid ${T.primary}`,
+                background: planTier === "free" ? "rgba(139,124,246,0.14)" : "hsla(226,72%,70%,0.14)",
+                border: planTier === "free" ? "1px solid rgba(139,124,246,0.4)" : `1px solid ${T.primary}`,
                 borderRadius: 9,
-                color: planTier === "free" ? "#c084fc" : T.primary,
+                color: planTier === "free" ? "#b3a8f8" : T.primary,
                 cursor: "pointer",
                 fontSize: 11,
                 fontWeight: 700,
@@ -300,7 +301,7 @@ export default function AIGridView({
                 gap: 4,
               }}
             >
-              <span>⚡</span>
+              <span><Icon name="radar" /></span>
               <span>{planTier === "free" ? "Plus" : planTier.toUpperCase()}</span>
             </button>
           )}
@@ -322,7 +323,7 @@ export default function AIGridView({
               alignItems: "center",
               justifyContent: "center",
             }}
-          >👤</button>
+          ><Icon name="user" /></button>
 
           <button
             type="button"
@@ -348,7 +349,7 @@ export default function AIGridView({
             style={{
               padding: "0 12px",
               height: 34,
-              background: "linear-gradient(135deg, hsl(119,99%,46%) 0%, hsl(119,99%,38%) 100%)",
+              background: "linear-gradient(135deg, hsl(226,72%,70%) 0%, hsl(226,62%,58%) 100%)",
               border: "none",
               borderRadius: 9,
               fontWeight: 700,
@@ -371,7 +372,7 @@ export default function AIGridView({
       {characters.length > 0 && (
         <div className="cc-story-strip">
           <div style={{ fontSize: 10, fontWeight: 700, color: T.muted, textTransform: "uppercase", letterSpacing: "0.06em", flexShrink: 0 }}>
-            🔥 Stories
+            Stories
           </div>
           {characters.slice(0, 8).map(c => (
             <button
@@ -384,7 +385,7 @@ export default function AIGridView({
                 gap: 6,
                 padding: "4px 10px 4px 5px",
                 background: T.surface,
-                border: c.is_replica ? "1.5px solid #a855f7" : "1.5px solid hsla(119,99%,46%,0.45)",
+                border: c.is_replica ? "1.5px solid #8b7cf6" : "1.5px solid hsla(226,72%,70%,0.45)",
                 borderRadius: 999,
                 cursor: "pointer",
                 flexShrink: 0,
@@ -414,10 +415,10 @@ export default function AIGridView({
       {/* Filter Tabs Bar */}
       <div className="cc-filter-tabs">
         {([
-          { id: "all", label: "🌟 All", count: characters.length },
-          { id: "my", label: "👤 My Bots", count: characters.filter(c => c.created_by === session?.user?.id || c.is_replica).length },
-          { id: "replicas", label: "🪞 Replicas", count: characters.filter(c => c.is_replica).length },
-          { id: "public", label: "🌍 Public", count: characters.filter(c => !c.is_replica && c.is_public).length },
+          { id: "all", label: "All", count: characters.length },
+          { id: "my", label: "My Bots", count: characters.filter(c => c.created_by === session?.user?.id || c.is_replica).length },
+          { id: "replicas", label: "Replicas", count: characters.filter(c => c.is_replica).length },
+          { id: "public", label: "Public", count: characters.filter(c => !c.is_replica && c.is_public).length },
         ] as const).map(tab => {
           const isActive = filterTab === tab.id
           return (
@@ -447,7 +448,7 @@ export default function AIGridView({
                 fontSize: 10,
                 padding: "1px 6px",
                 borderRadius: 10,
-                background: isActive ? "hsla(119,99%,46%,0.15)" : "rgba(255,255,255,0.06)",
+                background: isActive ? "hsla(226,72%,70%,0.15)" : "rgba(255,255,255,0.06)",
                 color: isActive ? T.primary : T.muted,
               }}>
                 {tab.count}
@@ -469,7 +470,7 @@ export default function AIGridView({
           ))
         ) : filteredChars.length === 0 ? (
           <div style={{ gridColumn: "1 / -1", textAlign: "center", padding: 40 }}>
-            <div style={{ fontSize: 42, marginBottom: 12 }}>🤖</div>
+            <div style={{ fontSize: 42, marginBottom: 12 }}><Icon name="bot" /></div>
             <h3 style={{ fontSize: 17, color: T.text, fontWeight: 600, marginBottom: 6 }}>No AI personas found</h3>
             <p style={{ color: T.muted, fontSize: 13, marginBottom: 18 }}>
               {searchQuery ? "Try a different search query." : "Create your first AI character to start chatting."}
@@ -479,7 +480,7 @@ export default function AIGridView({
               onClick={onOpenForm}
               style={{
                 padding: "10px 20px",
-                background: "linear-gradient(135deg, hsl(119,99%,46%) 0%, hsl(119,99%,38%) 100%)",
+                background: "linear-gradient(135deg, hsl(226,72%,70%) 0%, hsl(226,62%,58%) 100%)",
                 border: "none",
                 borderRadius: 10,
                 color: T.primaryFg,
@@ -496,7 +497,7 @@ export default function AIGridView({
             {replicas.length > 0 && (
               <>
                 <div style={{ gridColumn: "1 / -1", fontSize: 14, fontWeight: 700, color: T.text, marginTop: 4, borderBottom: `1px solid ${T.border}`, paddingBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
-                  <span>🪞</span> Your Digital Replicas ({replicas.length})
+                  <span><Icon name="twin" /></span> Your Digital Replicas ({replicas.length})
                 </div>
                 {replicas.map(renderCard)}
               </>
@@ -505,7 +506,7 @@ export default function AIGridView({
             {privateBots.length > 0 && (
               <>
                 <div style={{ gridColumn: "1 / -1", fontSize: 14, fontWeight: 700, color: T.text, marginTop: 14, borderBottom: `1px solid ${T.border}`, paddingBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
-                  <span>🔒</span> Custom / Private Bots ({privateBots.length})
+                  <span><Icon name="lock" /></span> Custom / Private Bots ({privateBots.length})
                 </div>
                 {privateBots.map(renderCard)}
               </>
@@ -514,7 +515,7 @@ export default function AIGridView({
             {publicBots.length > 0 && (
               <>
                 <div style={{ gridColumn: "1 / -1", fontSize: 14, fontWeight: 700, color: T.text, marginTop: 14, borderBottom: `1px solid ${T.border}`, paddingBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
-                  <span>🌍</span> Public Marketplace ({publicBots.length})
+                  <span><Icon name="globe" /></span> Public Marketplace ({publicBots.length})
                 </div>
                 {publicBots.map(renderCard)}
               </>

@@ -2,6 +2,7 @@
 import { useState } from "react"
 import { T } from "../../styles"
 import type { DiscordServer } from "../../lib/discordTypes"
+import { Icon } from "../Icons"
 
 interface Props {
   servers: DiscordServer[]
@@ -31,7 +32,7 @@ export default function ServerRail({
         width: 72,
         flexShrink: 0,
         height: "100%",
-        background: "#111215",
+        background: "#0b0d11",
         borderRight: "1px solid rgba(255, 255, 255, 0.06)",
         display: "flex",
         flexDirection: "column",
@@ -61,8 +62,8 @@ export default function ServerRail({
             width: 4,
             height: isHomeActive ? 40 : hoveredId === "home" ? 20 : 0,
             borderRadius: "0 4px 4px 0",
-            background: "#ffffff",
-            transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+            background: "#f4f5f7",
+            transition: "background-color 0.2s, border-radius 0.2s, height 0.2s, color 0.2s, opacity 0.2s, box-shadow 0.2s, transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
             opacity: isHomeActive || hoveredId === "home" ? 1 : 0,
           }}
         />
@@ -76,9 +77,9 @@ export default function ServerRail({
             height: 48,
             borderRadius: isHomeActive || hoveredId === "home" ? 16 : 24,
             background: isHomeActive
-              ? "linear-gradient(135deg, hsl(119,99%,46%), hsl(119,99%,36%))"
+              ? "linear-gradient(135deg, hsl(226,72%,70%), hsl(226,62%,58%))"
               : "rgba(255, 255, 255, 0.08)",
-            color: isHomeActive ? "#050505" : "#dbdee1",
+            color: isHomeActive ? "#050505" : "#d5d9e0",
             border: "none",
             display: "flex",
             alignItems: "center",
@@ -86,12 +87,12 @@ export default function ServerRail({
             fontSize: 20,
             fontWeight: 800,
             cursor: "pointer",
-            transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
-            boxShadow: isHomeActive ? "0 4px 16px hsla(119,99%,46%,0.35)" : "none",
+            transition: "background-color 0.2s, border-radius 0.2s, height 0.2s, color 0.2s, opacity 0.2s, box-shadow 0.2s, transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+            boxShadow: isHomeActive ? "0 4px 16px hsla(226,72%,70%,0.35)" : "none",
             position: "relative",
           }}
         >
-          <span>✦</span>
+          <span><Icon name="spark" /></span>
 
           {/* Unread badge */}
           {unreadDMsCount > 0 && (
@@ -100,13 +101,13 @@ export default function ServerRail({
                 position: "absolute",
                 bottom: -2,
                 right: -2,
-                background: "#f23f43",
-                color: "#ffffff",
+                background: "#e5666b",
+                color: "#f4f5f7",
                 fontSize: 10,
                 fontWeight: 800,
                 padding: "2px 5px",
                 borderRadius: 999,
-                border: "2px solid #111215",
+                border: "2px solid #0b0d11",
               }}
             >
               {unreadDMsCount}
@@ -148,8 +149,8 @@ export default function ServerRail({
                 width: 4,
                 height: isActive ? 40 : isHovered ? 20 : 0,
                 borderRadius: "0 4px 4px 0",
-                background: "#ffffff",
-                transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+                background: "#f4f5f7",
+                transition: "background-color 0.2s, border-radius 0.2s, height 0.2s, color 0.2s, opacity 0.2s, box-shadow 0.2s, transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
                 opacity: isActive || isHovered ? 1 : 0,
               }}
             />
@@ -163,11 +164,11 @@ export default function ServerRail({
                 height: 48,
                 borderRadius: isActive || isHovered ? 16 : 24,
                 background: isActive
-                  ? "hsl(119, 99%, 46%)"
+                  ? "hsl(226, 72%, 70%)"
                   : isHovered
                   ? "rgba(255, 255, 255, 0.16)"
                   : "rgba(255, 255, 255, 0.08)",
-                color: isActive ? "#050505" : "#dbdee1",
+                color: isActive ? "#050505" : "#d5d9e0",
                 border: "none",
                 display: "flex",
                 alignItems: "center",
@@ -175,7 +176,7 @@ export default function ServerRail({
                 fontSize: 18,
                 fontWeight: 700,
                 cursor: "pointer",
-                transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+                transition: "background-color 0.2s, border-radius 0.2s, height 0.2s, color 0.2s, opacity 0.2s, box-shadow 0.2s, transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
                 position: "relative",
               }}
             >
@@ -205,13 +206,13 @@ export default function ServerRail({
                     position: "absolute",
                     bottom: -2,
                     right: -2,
-                    background: "#f23f43",
-                    color: "#ffffff",
+                    background: "#e5666b",
+                    color: "#f4f5f7",
                     fontSize: 10,
                     fontWeight: 800,
                     padding: "2px 5px",
                     borderRadius: 999,
-                    border: "2px solid #111215",
+                    border: "2px solid #0b0d11",
                   }}
                 >
                   {server.unreadMentions}
@@ -236,7 +237,7 @@ export default function ServerRail({
             width: 48,
             height: 48,
             borderRadius: hoveredId === "add" ? 16 : 24,
-            background: hoveredId === "add" ? "hsl(119, 99%, 46%)" : "rgba(255, 255, 255, 0.06)",
+            background: hoveredId === "add" ? "hsl(226, 72%, 70%)" : "rgba(255, 255, 255, 0.06)",
             color: hoveredId === "add" ? "#050505" : "#23a55a",
             border: "1px dashed rgba(255, 255, 255, 0.15)",
             display: "flex",
@@ -245,7 +246,7 @@ export default function ServerRail({
             fontSize: 22,
             fontWeight: 700,
             cursor: "pointer",
-            transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+            transition: "background-color 0.2s, border-radius 0.2s, height 0.2s, color 0.2s, opacity 0.2s, box-shadow 0.2s, transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
           }}
         >
           +
@@ -267,18 +268,18 @@ export default function ServerRail({
             height: 48,
             borderRadius: hoveredId === "radar" ? 16 : 24,
             background: hoveredId === "radar" ? "rgba(56,189,248,0.25)" : "rgba(56,189,248,0.12)",
-            color: "#38bdf8",
+            color: "#62b5d9",
             border: "1px solid rgba(56,189,248,0.3)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             fontSize: 18,
             cursor: "pointer",
-            transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+            transition: "background-color 0.2s, border-radius 0.2s, height 0.2s, color 0.2s, opacity 0.2s, box-shadow 0.2s, transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
             boxShadow: hoveredId === "radar" ? "0 0 12px rgba(56,189,248,0.4)" : "none",
           }}
         >
-          ⚡
+          <Icon name="radar" />
         </button>
       </div>
     </aside>

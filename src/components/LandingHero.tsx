@@ -1,9 +1,7 @@
 "use client"
-import React, { Suspense, useState } from "react"
+import React from "react"
 import Link from "next/link"
-import ElectricBorder from "./ElectricBorder"
-
-const Spline = React.lazy(() => import("@splinetool/react-spline"))
+import { Icon } from "./Icons"
 
 interface LandingHeroProps {
   onLaunchApp?: () => void
@@ -11,78 +9,76 @@ interface LandingHeroProps {
 
 export function Navbar({ onLaunchApp }: LandingHeroProps) {
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 md:px-12 py-6 bg-transparent">
+    <header className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 md:px-12 py-5">
       <div className="flex items-center gap-3 cursor-pointer group" onClick={onLaunchApp}>
-        <div className="w-8 h-8 rounded-lg bg-[hsl(119,99%,46%)]/15 border border-[hsl(119,99%,46%)]/30 flex items-center justify-center text-sm text-[hsl(119,99%,46%)] group-hover:scale-105 transition-transform">
-          ✦
+        <div className="w-8 h-8 rounded-lg bg-[hsl(226,72%,70%)]/15 border border-[hsl(226,72%,70%)]/30 flex items-center justify-center text-sm text-[hsl(226,72%,70%)] group-hover:scale-105 transition-transform">
+          <Icon name="spark" />
         </div>
         <span className="text-foreground text-lg font-semibold tracking-tight uppercase font-sora">
-          KIKAR <span className="text-[hsl(119,99%,46%)] font-bold">AI</span>
+          KIKAR <span className="text-[hsl(226,72%,70%)] font-bold">AI</span>
         </span>
       </div>
     </header>
   )
 }
 
+const FEATURES = ["AI Servers", "Radar Matchmaking", "Digital Twins", "@ai Co-Pilot"]
+
 export function HeroSection({ onLaunchApp }: LandingHeroProps) {
-  const [splineError, setSplineError] = useState(false)
-
   return (
-    <section className="relative min-h-screen flex items-center justify-center bg-[hsl(0,0%,8%)] overflow-hidden text-center">
-      <div className="absolute inset-0 z-0">
-        <Suspense fallback={<div className="absolute inset-0 bg-[hsl(0,0%,8%)]" />}>
-          {!splineError ? (
-            <Spline
-              scene="https://prod.spline.design/Slk6b8kz3LRlKiyk/scene.splinecode"
-              className="w-full h-full"
-              onError={() => setSplineError(true)}
-            />
-          ) : (
-            <div className="absolute inset-0 bg-radial-gradient from-[hsl(119,99%,46%)]/10 via-[hsl(0,0%,8%)] to-[hsl(0,0%,5%)]" />
-          )}
-        </Suspense>
+    <section className="relative min-h-screen flex items-center justify-center bg-[#0f1115] overflow-hidden text-center">
+      {/* Static layered gradients: zero JS, zero WebGL. Drift uses transform only. */}
+      <div className="absolute inset-0 z-0 pointer-events-none">
+        <div className="kikar-orb kikar-orb-green" />
+        <div className="kikar-orb kikar-orb-purple" />
+        <div className="kikar-grid" />
       </div>
-
-      <div className="absolute inset-0 bg-radial-gradient from-black/40 via-[hsl(0,0%,8%)]/60 to-[hsl(0,0%,8%)]/90 z-[1] pointer-events-none" />
+      <div className="absolute inset-0 z-[1] pointer-events-none bg-gradient-to-b from-transparent via-transparent to-[#0f1115]" />
 
       <div className="relative z-10 w-full max-w-2xl px-6 md:px-12 py-20 flex flex-col items-center justify-center text-center mx-auto">
         <h1
-          className="text-[clamp(3rem,7vw,5.5rem)] font-bold leading-none tracking-[-0.04em] text-white uppercase font-sora opacity-0 animate-fade-up mb-4 text-center"
-          style={{ animationDelay: "0.15s" }}
+          className="text-[clamp(3rem,7vw,5.5rem)] font-bold leading-none tracking-[-0.04em] text-white uppercase font-sora opacity-0 animate-fade-up mb-4"
+          style={{ animationDelay: "0.1s" }}
         >
-          KIKAR <span className="text-[hsl(119,99%,46%)]">AI</span>
+          KIKAR <span className="text-[hsl(226,72%,70%)]">AI</span>
         </h1>
 
         <p
-          className="text-white/90 text-lg md:text-2xl font-light font-sora opacity-0 animate-fade-up mb-3 text-center"
-          style={{ animationDelay: "0.3s" }}
+          className="text-white/90 text-lg md:text-2xl font-light font-sora opacity-0 animate-fade-up mb-3"
+          style={{ animationDelay: "0.2s" }}
         >
-          AI Personas &amp; Always-On Digital Twins
+          AI Servers, Strangers Radar &amp; Digital Twins
         </p>
 
         <p
-          className="text-white/65 text-sm md:text-base font-light leading-relaxed font-sora opacity-0 animate-fade-up mb-8 max-w-lg mx-auto text-center"
-          style={{ animationDelay: "0.45s" }}
+          className="text-white/65 text-sm md:text-base font-light leading-relaxed font-sora opacity-0 animate-fade-up mb-6 max-w-lg mx-auto"
+          style={{ animationDelay: "0.3s" }}
         >
-          Chat with custom AI characters, summon AI co-pilots into human DMs, or let your personal Digital Replica reply while you&apos;re offline.
+          Hang out in AI-native Discord servers, match with live strangers on Kikar Radar with an AI Wingman, or let your Digital Replica reply while you&apos;re offline.
         </p>
 
-        <div className="opacity-0 animate-fade-up flex justify-center" style={{ animationDelay: "0.6s" }}>
-          <ElectricBorder
-            color="hsl(119, 99%, 46%)"
-            speed={1.4}
-            chaos={0.12}
-            borderRadius={999}
-            style={{ display: "inline-block" }}
-          >
-            <button
-              onClick={onLaunchApp}
-              className="bg-[hsl(119,99%,46%)] text-black px-9 py-4 rounded-full font-bold text-sm hover:brightness-110 active:scale-95 transition-all font-sora flex items-center gap-3 cursor-pointer shadow-[0_0_35px_rgba(34,197,94,0.35)]"
+        <div
+          className="opacity-0 animate-fade-up flex flex-wrap justify-center gap-2 mb-9"
+          style={{ animationDelay: "0.4s" }}
+        >
+          {FEATURES.map(f => (
+            <span
+              key={f}
+              className="text-[11px] font-medium text-white/70 bg-white/5 border border-white/10 px-3 py-1 rounded-full font-sora"
             >
-              <span>Start Chatting</span>
-              <span className="text-base">→</span>
-            </button>
-          </ElectricBorder>
+              {f}
+            </span>
+          ))}
+        </div>
+
+        <div className="opacity-0 animate-fade-up flex justify-center" style={{ animationDelay: "0.5s" }}>
+          <button
+            onClick={onLaunchApp}
+            className="kikar-cta bg-[hsl(226,72%,70%)] text-black px-9 py-4 rounded-full font-bold text-sm font-sora flex items-center gap-3 cursor-pointer"
+          >
+            <span>Start Chatting</span>
+            <span className="text-base">→</span>
+          </button>
         </div>
       </div>
     </section>
@@ -111,7 +107,7 @@ function Footer() {
 
 export default function LandingHero({ onLaunchApp }: LandingHeroProps) {
   return (
-    <div className="relative bg-[hsl(0,0%,8%)] min-h-screen text-foreground font-sora selection:bg-[hsl(119,99%,46%)] selection:text-black">
+    <div className="relative bg-[#0f1115] min-h-screen text-foreground font-sora selection:bg-[hsl(226,72%,70%)] selection:text-black">
       <Navbar onLaunchApp={onLaunchApp} />
       <HeroSection onLaunchApp={onLaunchApp} />
       <Footer />

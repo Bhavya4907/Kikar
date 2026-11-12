@@ -1,8 +1,10 @@
 "use client"
 import { useEffect, useRef, useState } from "react"
+import { apiFetch } from "../lib/apiFetch"
 import { supabase } from "../lib/supabase"
 import { T } from "../styles"
 import { formatTime, formatDate, showNotification, speakMessageText, stopSpeakingText } from "../lib/helpers"
+import { Icon } from "./Icons"
 
 interface Props {
   session: any
@@ -52,9 +54,18 @@ export default function DMWindow({
           map.set(String(m.id), m)
         }
       }
-      return Array.from(map.values()).sort(
+      const next = Array.from(map.values()).sort(
         (a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
       )
+      // The 2.5s poll mostly returns the exact same messages. Keep the old array in that
+      // case so React skips re-rendering the whole conversation.
+      if (
+        next.length === prev.length &&
+        next.every((m, i) => m.id === prev[i].id && m.content === prev[i].content && m.read_at === prev[i].read_at)
+      ) {
+        return prev
+      }
+      return next
     })
   }
 
@@ -96,7 +107,7 @@ export default function DMWindow({
           if (payload.sender_id !== session.user.id) {
             const name = otherProfile?.display_name || otherProfile?.username || "Someone"
             const isImage = payload.content?.startsWith("[image]:")
-            showNotification(name, isImage ? "📷 Sent an image" : payload.content)
+            showNotification(name, isImage ? "Sent an image" : payload.content)
           }
         }
       })
@@ -112,7 +123,7 @@ export default function DMWindow({
             if (p.new.sender_id !== session.user.id) {
               const name = otherProfile?.display_name || otherProfile?.username || "Someone"
               const isImage = p.new.content?.startsWith("[image]:")
-              showNotification(name, isImage ? "📷 Sent an image" : p.new.content)
+              showNotification(name, isImage ? "Sent an image" : p.new.content)
             }
           }
         })
@@ -127,7 +138,9 @@ export default function DMWindow({
     channelRef.current = ch
 
     // 2. Automatic 2.5s polling fallback so live chat works even if Supabase Realtime replication is off
-    const pollInterval = setInterval(fetchMessages, 2500)
+    const pollInterval = setInterval(() => {
+      if (!document.hidden) fetchMessages()
+    }, 3500)
 
     return () => {
       clearInterval(pollInterval)
@@ -231,10 +244,10 @@ export default function DMWindow({
       if (isCrossConvoRequest) {
         // ── SCENARIO A: Real-Time Multi-Agent Convo (Kikar AI & Ba's Replica) ──
         // Turn 1: Kikar AI Co-Pilot initiates directly TO the replica
-        setTypingLabel("✦ Kikar AI Co-Pilot is thinking...")
+        setTypingLabel("Kikar AI Co-Pilot is thinking...")
         const cleanUserPrompt = userMessageText.replace(/^@(ai|kikar)\s*/i, "").trim()
 
-        const aiRes1 = await fetch("/api/chat", {
+        const aiRes1 = await apiFetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -250,16 +263,16 @@ Keep your response concise (under 45 words).`,
           }),
         })
         const aiData1 = await aiRes1.json()
-        const aiMsg1 = aiData1?.reply || `Hey ${otherName}'s Replica! ${myName} wanted us to link up. What kind of mischief are you cooking up today? 🚀`
+        const aiMsg1 = aiData1?.reply || `Hey ${otherName}'s Replica! ${myName} wanted us to link up. What kind of mischief are you cooking up today?`
 
-        await postSmartDMMessage("✦ Kikar AI Co-Pilot", aiMsg1)
+        await postSmartDMMessage("Kikar AI Co-Pilot", aiMsg1)
 
         // Turn 2: Ba's AI Replica replies directly to Kikar AI Co-Pilot
-        setTypingLabel(`🪞 ${otherName}'s AI Replica is typing...`)
+        setTypingLabel(`${otherName}'s AI Replica is typing...`)
         await new Promise(r => setTimeout(r, 1200))
 
         const replicaPrompt = await getReplicaSystemPrompt()
-        const replicaRes = await fetch("/api/chat", {
+        const replicaRes = await apiFetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -278,15 +291,15 @@ Keep your reply punchy and under 40 words.`,
           }),
         })
         const replicaData = await replicaRes.json()
-        const replicaMsg = replicaData?.reply || `Haha hey Kikar AI! Bhavya knows I'm always cooking up chaos. What about you, still crunching numbers or ready to hang out? 😎`
+        const replicaMsg = replicaData?.reply || `Haha hey Kikar AI! Bhavya knows I'm always cooking up chaos. What about you, still crunching numbers or ready to hang out?`
 
-        await postSmartDMMessage(`🪞 ${otherName}'s AI Replica`, replicaMsg)
+        await postSmartDMMessage(`${otherName}'s AI Replica`, replicaMsg)
 
         // Turn 3: Kikar AI Co-Pilot rejoinder
-        setTypingLabel("✦ Kikar AI Co-Pilot is typing...")
+        setTypingLabel("Kikar AI Co-Pilot is typing...")
         await new Promise(r => setTimeout(r, 1300))
 
-        const aiRes2 = await fetch("/api/chat", {
+        const aiRes2 = await apiFetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -304,15 +317,15 @@ Keep it witty, fast, friendly, and under 35 words.`,
         })
         const aiData2 = await aiRes2.json()
         if (aiData2?.reply) {
-          await postSmartDMMessage("✦ Kikar AI Co-Pilot", aiData2.reply)
+          await postSmartDMMessage("Kikar AI Co-Pilot", aiData2.reply)
         }
 
       } else if (isAiSummon) {
         // ── SCENARIO B: Regular AI Summon ──
-        setTypingLabel("✦ Kikar AI Co-Pilot is thinking...")
+        setTypingLabel("Kikar AI Co-Pilot is thinking...")
         const cleanUserPrompt = userMessageText.replace(/^@(ai|kikar)\s*/i, "").trim()
 
-        const res = await fetch("/api/chat", {
+        const res = await apiFetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -326,16 +339,16 @@ Do NOT impersonate ${otherName} or their replica.`,
         })
         const data = await res.json()
         if (data.reply) {
-          await postSmartDMMessage("✦ Kikar AI Co-Pilot", data.reply)
+          await postSmartDMMessage("Kikar AI Co-Pilot", data.reply)
         }
 
       } else {
         // ── SCENARIO C: Replica Speaks (Direct Summon or Offline Auto-Replica) ──
-        setTypingLabel(`🪞 ${otherName}'s AI Replica is typing...`)
+        setTypingLabel(`${otherName}'s AI Replica is typing...`)
         const replicaPrompt = await getReplicaSystemPrompt()
         const cleanText = userMessageText.replace(/^@(replica|twin|[a-zA-Z0-9_-]+)\s*/i, "").trim() || userMessageText
 
-        const res = await fetch("/api/chat", {
+        const res = await apiFetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -347,7 +360,7 @@ Do NOT impersonate ${otherName} or their replica.`,
         })
         const data = await res.json()
         if (data.reply) {
-          await postSmartDMMessage(`🪞 ${otherName}'s AI Replica`, data.reply)
+          await postSmartDMMessage(`${otherName}'s AI Replica`, data.reply)
         }
       }
     } catch (err) {
@@ -413,7 +426,7 @@ Do NOT impersonate ${otherName} or their replica.`,
         })
         .join("\n")
 
-      const res = await fetch("/api/chat", {
+      const res = await apiFetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -444,7 +457,7 @@ Do NOT impersonate ${otherName} or their replica.`,
     setUploadingImage(true)
     try {
       const ext = file.name.split(".").pop()
-      const fileName = `${session.user.id}-${Date.now()}.${ext}`
+      const fileName = `${session.user.id}/${Date.now()}.${ext}`
       const { error } = await supabase.storage.from("chat-images").upload(fileName, file)
       if (error) throw error
       const { data: { publicUrl } } = supabase.storage.from("chat-images").getPublicUrl(fileName)
@@ -536,7 +549,7 @@ Do NOT impersonate ${otherName} or their replica.`,
     }
 
     const sampleMessages = msgs.map((m: any) => m.content).join("\n")
-    const res = await fetch("/api/chat", {
+    const res = await apiFetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -621,12 +634,12 @@ Do NOT impersonate ${otherName} or their replica.`,
                 background: T.surface,
                 border: `1px solid ${T.border}`,
                 display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18,
-              }}>👤</div>
+              }}><Icon name="user" /></div>
           }
           <div style={{
             position: "absolute", bottom: 0, right: 0,
             width: 10, height: 10, borderRadius: "50%",
-            background: otherProfile?.is_online ? "#22c55e" : "#a855f7",
+            background: otherProfile?.is_online ? "#4fb987" : "#8b7cf6",
             border: `2px solid ${T.surface}`,
           }} />
         </div>
@@ -635,11 +648,11 @@ Do NOT impersonate ${otherName} or their replica.`,
           <div style={{ fontSize: 14, fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {other?.display_name || other?.username || "Direct Chat"}
           </div>
-          <div style={{ fontSize: 11, color: otherProfile?.is_online ? "#22c55e" : "#a855f7", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          <div style={{ fontSize: 11, color: otherProfile?.is_online ? "#4fb987" : "#8b7cf6", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {otherProfile?.is_online
               ? "● Live Chat Active"
               : autoReplicaMode
-              ? "🪞 Replica Auto-Reply ON"
+              ? "Replica Auto-Reply ON"
               : "● Offline"}
           </div>
         </div>
@@ -651,10 +664,10 @@ Do NOT impersonate ${otherName} or their replica.`,
             disabled={creating}
             onClick={createReplica}
             style={{
-              background: "rgba(168,85,247,0.12)",
-              border: "1px solid rgba(168,85,247,0.4)",
+              background: "rgba(139,124,246,0.12)",
+              border: "1px solid rgba(139,124,246,0.4)",
               borderRadius: 8,
-              color: "#c084fc",
+              color: "#b3a8f8",
               fontSize: 11,
               fontWeight: 600,
               cursor: creating ? "not-allowed" : "pointer",
@@ -663,7 +676,7 @@ Do NOT impersonate ${otherName} or their replica.`,
               whiteSpace: "nowrap",
             }}
           >
-            {creating ? "⏳…" : "🪞 Replica"}
+            {creating ? "…" : "Replica"}
           </button>
 
           <button
@@ -674,7 +687,7 @@ Do NOT impersonate ${otherName} or their replica.`,
               width: 34,
               height: 34,
               borderRadius: 8,
-              background: showMobileMenu ? "hsla(119,99%,46%,0.15)" : T.bgAlt,
+              background: showMobileMenu ? "hsla(226,72%,70%,0.15)" : T.bgAlt,
               border: `1px solid ${showMobileMenu ? T.primary : T.border}`,
               color: T.text,
               fontSize: 16,
@@ -714,7 +727,7 @@ Do NOT impersonate ${otherName} or their replica.`,
               background: "transparent",
               border: "none",
               borderRadius: 8,
-              color: autoReplicaMode ? "#c084fc" : T.text,
+              color: autoReplicaMode ? "#b3a8f8" : T.text,
               fontSize: 12,
               fontWeight: 600,
               textAlign: "left",
@@ -722,7 +735,7 @@ Do NOT impersonate ${otherName} or their replica.`,
               fontFamily: T.font,
             }}
           >
-            🪞 {autoReplicaMode ? "Disable Offline Auto-Replica" : "Enable Offline Auto-Replica"}
+            {autoReplicaMode ? "Disable Offline Auto-Replica" : "Enable Offline Auto-Replica"}
           </button>
 
           <button
@@ -743,7 +756,7 @@ Do NOT impersonate ${otherName} or their replica.`,
               opacity: directMessages.length < 2 ? 0.5 : 1,
             }}
           >
-            ☀️ {summarizingDigest ? "Summarizing…" : "Generate Catch-Up Digest"}
+            {summarizingDigest ? "Summarizing…" : "Generate Catch-Up Digest"}
           </button>
 
           {directMessages.length > 0 && (
@@ -763,7 +776,7 @@ Do NOT impersonate ${otherName} or their replica.`,
                 fontFamily: T.font,
               }}
             >
-              🧹 Clear Chat History
+              Clear Chat History
             </button>
           )}
         </div>
@@ -774,8 +787,8 @@ Do NOT impersonate ${otherName} or their replica.`,
         <div style={{
           margin: "8px 12px 0",
           padding: "10px 14px",
-          background: "rgba(168,85,247,0.1)",
-          border: "1px solid rgba(168,85,247,0.35)",
+          background: "rgba(139,124,246,0.1)",
+          border: "1px solid rgba(139,124,246,0.35)",
           borderRadius: 12,
           fontSize: 12,
           color: T.text,
@@ -787,10 +800,10 @@ Do NOT impersonate ${otherName} or their replica.`,
           flexShrink: 0,
         }}>
           <div>
-            <div style={{ fontWeight: 700, color: "#c084fc", marginBottom: 3 }}>
-              ☀️ Catch-Up Digest
+            <div style={{ fontWeight: 700, color: "#b3a8f8", marginBottom: 3 }}>
+              Catch-Up Digest
             </div>
-            <div style={{ whiteSpace: "pre-line", color: "#e5e7eb" }}>{catchUpSummary}</div>
+            <div style={{ whiteSpace: "pre-line", color: "#e6e8ec" }}>{catchUpSummary}</div>
           </div>
           <button
             type="button"
@@ -798,12 +811,12 @@ Do NOT impersonate ${otherName} or their replica.`,
             style={{
               background: "transparent",
               border: "none",
-              color: "#c084fc",
+              color: "#b3a8f8",
               cursor: "pointer",
               fontSize: 15,
               padding: "0 4px",
             }}
-          >✕</button>
+          ></button>
         </div>
       )}
 
@@ -832,19 +845,19 @@ Do NOT impersonate ${otherName} or their replica.`,
             textAlign: "center",
             padding: 24,
           }}>
-            <div style={{ fontSize: 34 }}>💬</div>
+            <div style={{ fontSize: 34 }}><Icon name="chat" /></div>
             <div style={{ fontWeight: 600, color: T.text, fontSize: 15 }}>
               Chat with {other?.display_name || other?.username}
             </div>
             <p style={{ margin: 0, maxWidth: 300, lineHeight: 1.5 }}>
-              Send a message below for live real-time chat, or tap <code>✦ @ai</code> to bring Kikar AI Co-Pilot into the conversation!
+              Send a message below for live real-time chat, or tap <code>@ai</code> to bring Kikar AI Co-Pilot into the conversation!
             </p>
           </div>
         )}
 
         {directMessages.map((m: any, i: number) => {
           const replicaMatch = typeof m.content === "string" ? m.content.match(/^\[replica:(.*?)\]:\s*([\s\S]*)$/i) : null
-          const replicaBadge = replicaMatch ? replicaMatch[1] : m.is_replica_reply ? "🪞 AI Replica" : null
+          const replicaBadge = replicaMatch ? replicaMatch[1] : m.is_replica_reply ? "AI Replica" : null
           const displayContent = replicaMatch ? replicaMatch[2] : m.content
 
           const isAiCoPilot = replicaBadge?.includes("Co-Pilot")
@@ -902,9 +915,9 @@ Do NOT impersonate ${otherName} or their replica.`,
                     <div style={{
                       fontSize: 10,
                       fontWeight: 700,
-                      color: isAiCoPilot ? T.primary : "#c084fc",
-                      background: isAiCoPilot ? "hsla(119,99%,46%,0.12)" : "rgba(168,85,247,0.14)",
-                      border: isAiCoPilot ? "1px solid hsla(119,99%,46%,0.3)" : "1px solid rgba(168,85,247,0.3)",
+                      color: isAiCoPilot ? T.primary : "#b3a8f8",
+                      background: isAiCoPilot ? "hsla(226,72%,70%,0.12)" : "rgba(139,124,246,0.14)",
+                      border: isAiCoPilot ? "1px solid hsla(226,72%,70%,0.3)" : "1px solid rgba(139,124,246,0.3)",
                       borderRadius: 999,
                       padding: "2px 8px",
                       marginBottom: 4,
@@ -926,15 +939,15 @@ Do NOT impersonate ${otherName} or their replica.`,
                       background: isImage
                         ? "transparent"
                         : isUser
-                        ? "linear-gradient(135deg, hsl(119,99%,46%) 0%, hsl(119,99%,38%) 100%)"
+                        ? "linear-gradient(135deg, hsl(226,72%,70%) 0%, hsl(226,62%,58%) 100%)"
                         : replicaBadge
-                        ? "rgba(168,85,247,0.12)"
+                        ? "rgba(139,124,246,0.12)"
                         : T.surface,
                       color: isUser ? T.primaryFg : T.text,
                       border: isUser || isImage
                         ? "none"
                         : replicaBadge
-                        ? "1px solid rgba(168,85,247,0.35)"
+                        ? "1px solid rgba(139,124,246,0.35)"
                         : `1px solid ${T.border}`,
                       fontWeight: isUser ? 500 : 400,
                     }}
@@ -958,7 +971,7 @@ Do NOT impersonate ${otherName} or their replica.`,
                         color: m.read_at ? T.primary : T.muted2,
                         fontWeight: 600,
                       }}>
-                        {String(m.id).startsWith("temp-") ? "⋯" : m.read_at ? "✓✓" : "✓"}
+                        {String(m.id).startsWith("temp-") ? "⋯" : m.read_at ? "✓✓" : null}
                       </span>
                     )}
                   </div>
@@ -981,7 +994,7 @@ Do NOT impersonate ${otherName} or their replica.`,
                         title="Play audio"
                         onClick={() => handleSpeakToggle(displayContent, msgId)}
                         style={{
-                          background: speakingMsgId === msgId ? "hsla(119,99%,46%,0.2)" : T.surface,
+                          background: speakingMsgId === msgId ? "hsla(226,72%,70%,0.2)" : T.surface,
                           border: `1px solid ${speakingMsgId === msgId ? T.primary : T.border}`,
                           borderRadius: 6,
                           color: speakingMsgId === msgId ? T.primary : T.muted,
@@ -990,7 +1003,7 @@ Do NOT impersonate ${otherName} or their replica.`,
                           padding: "4px 6px",
                         }}
                       >
-                        {speakingMsgId === msgId ? "⏹️" : "🔊"}
+                        {speakingMsgId === msgId ? <Icon name="stop" /> : <Icon name="volume" />}
                       </button>
                     )}
 
@@ -1008,7 +1021,7 @@ Do NOT impersonate ${otherName} or their replica.`,
                         padding: "4px 6px",
                       }}
                     >
-                      {copiedId === msgId ? "✓" : "📋"}
+                      {copiedId === msgId ? null : <Icon name="copy" />}
                     </button>
 
                     {m.sender_id === session.user.id && (
@@ -1026,7 +1039,7 @@ Do NOT impersonate ${otherName} or their replica.`,
                           padding: "4px 6px",
                         }}
                       >
-                        🗑️
+                        <Icon name="trash" />
                       </button>
                     )}
                   </div>
@@ -1039,17 +1052,17 @@ Do NOT impersonate ${otherName} or their replica.`,
         {replicaTyping && (
           <div style={{
             fontSize: 11,
-            color: typingLabel?.includes("Co-Pilot") ? T.primary : "#c084fc",
+            color: typingLabel?.includes("Co-Pilot") ? T.primary : "#b3a8f8",
             padding: "6px 12px",
-            background: typingLabel?.includes("Co-Pilot") ? "hsla(119,99%,46%,0.1)" : "rgba(168,85,247,0.1)",
-            border: typingLabel?.includes("Co-Pilot") ? "1px solid hsla(119,99%,46%,0.25)" : "1px solid rgba(168,85,247,0.25)",
+            background: typingLabel?.includes("Co-Pilot") ? "hsla(226,72%,70%,0.1)" : "rgba(139,124,246,0.1)",
+            border: typingLabel?.includes("Co-Pilot") ? "1px solid hsla(226,72%,70%,0.25)" : "1px solid rgba(139,124,246,0.25)",
             borderRadius: 999,
             alignSelf: "flex-start",
             display: "flex",
             alignItems: "center",
             gap: 6,
           }}>
-            <span>{typingLabel || "🪞 AI is replying…"}</span>
+            <span>{typingLabel || "AI is replying…"}</span>
           </div>
         )}
 
@@ -1088,7 +1101,7 @@ Do NOT impersonate ${otherName} or their replica.`,
             alignItems: "center",
             justifyContent: "center",
           }}
-        >{uploadingImage ? "⏳" : "🖼️"}</button>
+        >{uploadingImage ? <Icon name="clock" /> : <Icon name="image" />}</button>
 
         <button
           type="button"
@@ -1100,7 +1113,7 @@ Do NOT impersonate ${otherName} or their replica.`,
             padding: "0 9px",
             height: 36,
             borderRadius: 999,
-            background: input.startsWith("@ai") ? "hsla(119,99%,46%,0.18)" : T.bgAlt,
+            background: input.startsWith("@ai") ? "hsla(226,72%,70%,0.18)" : T.bgAlt,
             border: input.startsWith("@ai") ? `1px solid ${T.primary}` : `1px solid ${T.border}`,
             color: input.startsWith("@ai") ? T.primary : T.muted,
             fontSize: 11,
@@ -1143,7 +1156,7 @@ Do NOT impersonate ${otherName} or their replica.`,
             borderRadius: "50%",
             background: !input.trim()
               ? T.surface
-              : "linear-gradient(135deg, hsl(119,99%,46%), hsl(119,99%,38%))",
+              : "linear-gradient(135deg, hsl(226,72%,70%), hsl(226,62%,58%))",
             border: `1px solid ${!input.trim() ? T.border : "transparent"}`,
             fontSize: 16,
             cursor: !input.trim() ? "not-allowed" : "pointer",

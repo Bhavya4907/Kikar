@@ -1,15 +1,18 @@
 "use client"
 import { useState, useEffect, useMemo, useRef } from "react"
+import { apiFetch } from "../../lib/apiFetch"
 import { supabase } from "../../lib/supabase"
+import { WebRTCVoiceManager, type VoicePeerState } from "../../lib/webrtcVoice"
 import ServerRail from "./ServerRail"
 import ChannelSidebar from "./ChannelSidebar"
 import ServerChatArea from "./ServerChatArea"
 import ServerMemberList from "./ServerMemberList"
 import CreateServerModal from "./CreateServerModal"
+import VoiceLoungeStage from "./VoiceLoungeStage"
 import PeopleDirectoryView from "../PeopleDirectoryView"
 import RandomMatchWindow from "../RandomMatchWindow"
 import AIGridView from "../AIGridView"
-import DMWindow from "../DMWIndow"
+import DMWindow from "../DMWindow"
 import ChatWindow from "../ChatWindow"
 import CharacterForm from "../CharacterForm"
 import type { DiscordServer, DiscordChannel, DiscordMessage, DiscordMember } from "../../lib/discordTypes"
@@ -26,12 +29,16 @@ interface Props {
   onOpenConvo: (convo: any) => void
   activeChar: any
   onOpenChar: (char: any) => void
+  charMessages?: any[]
+  setCharMessages?: (msgs: any) => void
   onCloseActive: () => void
   onStartConversation: (partnerId: string) => void
   onOpenProfile: () => void
   onSignOut: () => void
   planTier: PlanTier
   quota: UsageQuota | null
+  onConsumeChatQuota?: () => boolean
+  onConsumeImageQuota?: () => boolean
   onOpenPricing: () => void
   onDeleteCharacter: (id: string) => void
   creating: boolean
@@ -42,13 +49,12 @@ const DEFAULT_SERVERS: DiscordServer[] = [
   {
     id: "kikar-central",
     name: "Kikar Central",
-    icon: "🚀",
     ownerId: "system",
     description: "Official community hub for Kikar AI, human fellows, and digital twins.",
     channels: [
       { id: "kc-general", serverId: "kikar-central", name: "general", type: "text", topic: "General community banter & hello!" },
       { id: "kc-ai-wingman", serverId: "kikar-central", name: "ai-wingman", type: "ai", topic: "Chat with the AI wingman & brainstorm" },
-      { id: "kc-voice-hangout", serverId: "kikar-central", name: "voice-hangout", type: "voice", topic: "Live voice audio hangout lounge" },
+      { id: "kc-voice-hangout", serverId: "kikar-central", name: "voice-hangout", type: "voice", topic: "Live P2P WebRTC voice audio hangout lounge" },
       { id: "kc-announcements", serverId: "kikar-central", name: "announcements", type: "text", topic: "Kikar platform updates & releases" },
       { id: "kc-radar-lounge", serverId: "kikar-central", name: "radar-lounge", type: "radar", topic: "Speed stranger matching lounge" },
     ],
@@ -56,12 +62,11 @@ const DEFAULT_SERVERS: DiscordServer[] = [
   {
     id: "gaming-lounge",
     name: "Gaming & Banter",
-    icon: "🎮",
     ownerId: "system",
     description: "Gaming discussion, anime debates, and AI trivia.",
     channels: [
       { id: "gl-general", serverId: "gaming-lounge", name: "game-chat", type: "text", topic: "Talk games, clips, and setups" },
-      { id: "gl-voice-comms", serverId: "gaming-lounge", name: "squad-voice", type: "voice", topic: "Gaming comms voice lounge" },
+      { id: "gl-voice-comms", serverId: "gaming-lounge", name: "squad-voice", type: "voice", topic: "Live P2P WebRTC gaming comms voice lounge" },
       { id: "gl-ai-trivia", serverId: "gaming-lounge", name: "trivia-bot", type: "ai", topic: "Compete with AI trivia masters" },
     ],
   },
@@ -111,49 +116,78 @@ export default function DiscordView({
   onOpenConvo,
   activeChar,
   onOpenChar,
+  charMessages = [],
+  setCharMessages,
   onCloseActive,
   onStartConversation,
   onOpenProfile,
   onSignOut,
   planTier,
   quota,
+  onConsumeChatQuota,
+  onConsumeImageQuota,
   onOpenPricing,
   onDeleteCharacter,
   creating,
   setCreating,
 }: Props) {
-  // Navigation State
   const [servers, setServers] = useState<DiscordServer[]>(DEFAULT_SERVERS)
   const [activeServerId, setActiveServerId] = useState<string | null>(null) // null = Home / DMs
   const [activeChannelId, setActiveChannelId] = useState<string>("kc-general")
   const [homeSubView, setHomeSubView] = useState<"fellows" | "radar" | "personas">("fellows")
-  const [memberListOpen, setMemberListOpen] = useState(true)
+  const [memberListOpen, setMemberListOpen] = useState(false)
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
   const [showCreateServer, setShowCreateServer] = useState(false)
   const [editingChar, setEditingChar] = useState<any>(null)
   const [showCharForm, setShowCharForm] = useState(false)
-  const [charMessages, setCharMessages] = useState<any[]>([])
+  const [localCharMsgs, setLocalCharMsgs] = useState<any[]>([])
 
-  // Live Features State
+  const effectiveCharMessages = setCharMessages ? charMessages : localCharMsgs
+  const updateCharMessages = setCharMessages || setLocalCharMsgs
+
+  // Default memberListOpen to true only on desktop screens (>= 1024px)
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.innerWidth >= 1024) {
+      setMemberListOpen(true)
+    }
+  }, [])
+
+  // Live Features & WebRTC Voice State
   const [voiceConnected, setVoiceConnected] = useState(false)
+  const [voiceChannelId, setVoiceChannelId] = useState<string | null>(null)
+  const [voicePeers, setVoicePeers] = useState<VoicePeerState[]>([])
+  const [micMuted, setMicMuted] = useState(false)
+  const [deafened, setDeafened] = useState(false)
+  const [voiceWarning, setVoiceWarning] = useState<string | null>(null)
+
   const [generatingImg, setGeneratingImg] = useState(false)
   const [typingUsers, setTypingUsers] = useState<Record<string, { name: string; expires: number }>>({})
 
   const realtimeChannelRef = useRef<any>(null)
+  const voiceManagerRef = useRef<WebRTCVoiceManager | null>(null)
 
   const myName = profile?.display_name || profile?.username || session?.user?.email?.split("@")[0] || "User"
 
-  // Channel Messages Map with default welcome seeds
+  // Clean up WebRTC voice on unmount
+  useEffect(() => {
+    return () => {
+      if (voiceManagerRef.current) {
+        voiceManagerRef.current.leave()
+        voiceManagerRef.current = null
+      }
+    }
+  }, [])
+
   const [channelMessages, setChannelMessages] = useState<Record<string, DiscordMessage[]>>({
     "kc-general": [
       {
         id: "msg-welcome-1",
         channelId: "kc-general",
         senderId: "system",
-        senderName: "Kikar AI ✦",
+        senderName: "Kikar AI",
         role: "bot",
         badge: "BOT",
-        content: "👋 Welcome to Kikar Central! This is your AI-native community space. Chat with real friends, summon @ai anytime, or mention friends to chat with their offline Digital Replicas 🪞.",
+        content: "Welcome to Kikar Central! This is your AI-native community space. Chat with real friends, summon @ai anytime, hop into #voice-hangout for live P2P WebRTC audio, or mention friends to chat with their offline Digital Replicas.",
         created_at: new Date(Date.now() - 3600000).toISOString(),
       },
     ],
@@ -162,16 +196,15 @@ export default function DiscordView({
         id: "msg-ai-1",
         channelId: "kc-ai-wingman",
         senderId: "ai-wingman",
-        senderName: "AI Wingman 🎲",
+        senderName: "AI Wingman",
         role: "bot",
         badge: "BOT",
-        content: "✦ Wingman ready! Ask me for an icebreaker, settle a debate, or brainstorm anything by typing in this channel or tagging @ai.",
+        content: "Wingman ready! Ask me for an icebreaker, settle a debate, or brainstorm anything by typing in this channel or tagging @ai.",
         created_at: new Date().toISOString(),
       },
     ],
   })
 
-  // Load persisted servers and messages from localStorage
   useEffect(() => {
     const savedServers = localStorage.getItem("kikar_discord_servers")
     if (savedServers) {
@@ -198,7 +231,6 @@ export default function DiscordView({
     }
   }, [])
 
-  // Persist servers
   function updateServers(newServers: DiscordServer[]) {
     setServers(newServers)
     localStorage.setItem("kikar_discord_servers", JSON.stringify(newServers))
@@ -214,11 +246,19 @@ export default function DiscordView({
     return activeServer.channels.find((c) => c.id === activeChannelId) || activeServer.channels[0] || null
   }, [activeServer, activeChannelId])
 
+  const connectedVoiceChannel = useMemo(() => {
+    if (!voiceChannelId) return null
+    for (const s of servers) {
+      const ch = s.channels.find((c) => c.id === voiceChannelId)
+      if (ch) return ch
+    }
+    return null
+  }, [servers, voiceChannelId])
+
   // ── Supabase Realtime Subscription for Active Channel ────────────
   useEffect(() => {
     if (!activeChannel) return
 
-    // Clean up previous channel subscription
     if (realtimeChannelRef.current) {
       supabase.removeChannel(realtimeChannelRef.current)
       realtimeChannelRef.current = null
@@ -280,7 +320,6 @@ export default function DiscordView({
 
     realtimeChannelRef.current = channel
 
-    // Periodic cleanup of stale typing indicators
     const interval = setInterval(() => {
       const now = Date.now()
       setTypingUsers((prev) => {
@@ -306,11 +345,9 @@ export default function DiscordView({
     }
   }, [activeChannel?.id, session?.user?.id])
 
-  // Build Unified Member List for current server / channel
   const serverMembers: DiscordMember[] = useMemo(() => {
     const list: DiscordMember[] = []
 
-    // 1. Current user
     list.push({
       id: session?.user?.id || "me",
       username: profile?.username || session?.user?.email?.split("@")[0] || "user",
@@ -318,24 +355,25 @@ export default function DiscordView({
       avatar_url: profile?.avatar_url,
       is_online: true,
       role: "owner",
-      status_note: profile?.replica_status_note || (voiceConnected ? "In Voice Lounge 🔊" : "Exploring Kikar Discord"),
+      status_note:
+        profile?.replica_status_note ||
+        (voiceConnected ? `In #${connectedVoiceChannel?.name || "voice"}` : "Exploring Kikar Discord"),
     })
 
-    // 2. Real human fellows
     for (const p of allProfiles || []) {
       if (p.id === session?.user?.id) continue
+      const inVoice = voicePeers.some((vp) => vp.userId === p.id)
       list.push({
         id: p.id,
         username: p.username,
         display_name: p.display_name,
         avatar_url: p.avatar_url,
-        is_online: p.is_online,
+        is_online: p.is_online || inVoice,
         role: "member",
-        status_note: p.replica_status_note,
+        status_note: inVoice ? `In #${connectedVoiceChannel?.name || "voice"}` : p.replica_status_note,
       })
     }
 
-    // 3. AI Personas living in server (Bots vs Replicas)
     for (const char of characters || []) {
       const isReplica = !!char.is_replica
       list.push({
@@ -352,11 +390,182 @@ export default function DiscordView({
     }
 
     return list
-  }, [session, profile, allProfiles, characters, voiceConnected])
+  }, [session, profile, allProfiles, characters, voiceConnected, voicePeers, connectedVoiceChannel])
 
   const activeTypingNames = useMemo(() => {
     return Object.values(typingUsers).map((u) => u.name)
   }, [typingUsers])
+
+  // ── WebRTC Voice Lounge Connection Management ───────────────────
+  async function connectToVoiceLounge(targetChannelId: string) {
+    if (voiceManagerRef.current) {
+      await voiceManagerRef.current.leave()
+      voiceManagerRef.current = null
+    }
+
+    setVoiceWarning(null)
+    const myId = session?.user?.id || `guest-${Math.random().toString(36).slice(2, 8)}`
+    const mgr = new WebRTCVoiceManager({
+      channelId: targetChannelId,
+      userId: myId,
+      username: myName,
+      avatarUrl: profile?.avatar_url,
+      onPeersChanged: (peers) => {
+        setVoicePeers([...peers])
+      },
+      onError: (errMsg) => {
+        setVoiceWarning(errMsg)
+      },
+    })
+
+    voiceManagerRef.current = mgr
+    setVoiceChannelId(targetChannelId)
+    setVoiceConnected(true)
+    playDiscordChime("join")
+
+    await mgr.join()
+    if (micMuted) mgr.setMuted(true)
+    if (deafened) mgr.setDeafened(true)
+
+    const notice: DiscordMessage = {
+      id: `notice-${Date.now()}`,
+      channelId: targetChannelId,
+      senderId: "system",
+      senderName: "System",
+      role: "system",
+      content: `${myName} connected to WebRTC voice lounge.`,
+      created_at: new Date().toISOString(),
+    }
+    setChannelMessages((prev) => {
+      const updated = {
+        ...prev,
+        [targetChannelId]: [...(prev[targetChannelId] || []), notice],
+      }
+      localStorage.setItem("kikar_discord_messages", JSON.stringify(updated))
+      return updated
+    })
+    if (realtimeChannelRef.current && activeChannel?.id === targetChannelId) {
+      realtimeChannelRef.current.send({
+        type: "broadcast",
+        event: "new-channel-msg",
+        payload: notice,
+      })
+    }
+  }
+
+  async function disconnectFromVoiceLounge() {
+    const prevChannelId = voiceChannelId || activeChannel?.id
+    if (voiceManagerRef.current) {
+      await voiceManagerRef.current.leave()
+      voiceManagerRef.current = null
+    }
+    setVoiceConnected(false)
+    setVoiceChannelId(null)
+    setVoicePeers([])
+    setVoiceWarning(null)
+    playDiscordChime("leave")
+
+    if (prevChannelId) {
+      const notice: DiscordMessage = {
+        id: `notice-${Date.now()}`,
+        channelId: prevChannelId,
+        senderId: "system",
+        senderName: "System",
+        role: "system",
+        content: `${myName} left the voice lounge.`,
+        created_at: new Date().toISOString(),
+      }
+      setChannelMessages((prev) => {
+        const updated = {
+          ...prev,
+          [prevChannelId]: [...(prev[prevChannelId] || []), notice],
+        }
+        localStorage.setItem("kikar_discord_messages", JSON.stringify(updated))
+        return updated
+      })
+      if (realtimeChannelRef.current && activeChannel?.id === prevChannelId) {
+        realtimeChannelRef.current.send({
+          type: "broadcast",
+          event: "new-channel-msg",
+          payload: notice,
+        })
+      }
+    }
+  }
+
+  function handleToggleVoice() {
+    if (voiceConnected) {
+      disconnectFromVoiceLounge()
+    } else {
+      // Find appropriate voice channel to join
+      const targetChId =
+        activeChannel?.type === "voice"
+          ? activeChannel.id
+          : activeServer?.channels.find((c) => c.type === "voice")?.id ||
+            activeChannel?.id ||
+            "kc-voice-hangout"
+      connectToVoiceLounge(targetChId)
+    }
+  }
+
+  function handleToggleMic() {
+    const nextMuted = !micMuted
+    setMicMuted(nextMuted)
+    if (voiceManagerRef.current) {
+      voiceManagerRef.current.setMuted(nextMuted)
+    }
+  }
+
+  function handleToggleDeafen() {
+    const nextDeafened = !deafened
+    setDeafened(nextDeafened)
+    if (nextDeafened && !micMuted) {
+      setMicMuted(true)
+    }
+    if (voiceManagerRef.current) {
+      voiceManagerRef.current.setDeafened(nextDeafened)
+    }
+  }
+
+  function handleSetPeerVolume(userId: string, volume: number) {
+    if (voiceManagerRef.current) {
+      voiceManagerRef.current.setPeerVolume(userId, volume)
+    }
+  }
+
+  function handleBroadcastVoiceTranscript(speaker: string, text: string, role: "user" | "bot") {
+    const targetId = voiceChannelId || activeChannel?.id
+    if (!targetId) return
+
+    const transcriptMsg: DiscordMessage = {
+      id: `vtrans-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      channelId: targetId,
+      senderId: role === "bot" ? "kikar-voice-ai" : session?.user?.id || "user",
+      senderName: speaker,
+      senderAvatar: role === "user" ? profile?.avatar_url : undefined,
+      role,
+      badge: role === "bot" ? "VOICE AI" : undefined,
+      content: text,
+      created_at: new Date().toISOString(),
+    }
+
+    setChannelMessages((prev) => {
+      const updated = {
+        ...prev,
+        [targetId]: [...(prev[targetId] || []), transcriptMsg],
+      }
+      localStorage.setItem("kikar_discord_messages", JSON.stringify(updated))
+      return updated
+    })
+
+    if (realtimeChannelRef.current && activeChannel?.id === targetId) {
+      realtimeChannelRef.current.send({
+        type: "broadcast",
+        event: "new-channel-msg",
+        payload: transcriptMsg,
+      })
+    }
+  }
 
   // ── Actions ─────────────────────────────────────────────────────
   function handleSelectServer(serverId: string | null) {
@@ -374,6 +583,12 @@ export default function DiscordView({
   function handleSelectChannel(channelId: string) {
     setActiveChannelId(channelId)
     setMobileDrawerOpen(false)
+
+    // If user clicked a voice channel and isn't already connected to it, auto-connect
+    const targetChannel = activeServer?.channels.find((c) => c.id === channelId)
+    if (targetChannel?.type === "voice" && voiceChannelId !== channelId) {
+      connectToVoiceLounge(channelId)
+    }
   }
 
   function handleSelectHomeSubView(view: "fellows" | "radar" | "personas") {
@@ -391,41 +606,6 @@ export default function DiscordView({
     setShowCharForm(true)
     onCloseActive()
     setMobileDrawerOpen(false)
-  }
-
-  function handleToggleVoice() {
-    const nextState = !voiceConnected
-    setVoiceConnected(nextState)
-    playDiscordChime(nextState ? "join" : "leave")
-
-    if (activeChannel) {
-      const notice: DiscordMessage = {
-        id: `notice-${Date.now()}`,
-        channelId: activeChannel.id,
-        senderId: "system",
-        senderName: "System",
-        role: "system",
-        content: nextState
-          ? `🔊 ${myName} joined the voice lounge.`
-          : `🔈 ${myName} left the voice lounge.`,
-        created_at: new Date().toISOString(),
-      }
-      setChannelMessages((prev) => {
-        const updated = {
-          ...prev,
-          [activeChannel.id]: [...(prev[activeChannel.id] || []), notice],
-        }
-        localStorage.setItem("kikar_discord_messages", JSON.stringify(updated))
-        return updated
-      })
-      if (realtimeChannelRef.current) {
-        realtimeChannelRef.current.send({
-          type: "broadcast",
-          event: "new-channel-msg",
-          payload: notice,
-        })
-      }
-    }
   }
 
   function handleUserTyping(isTyping: boolean) {
@@ -498,7 +678,6 @@ export default function DiscordView({
       return updated
     })
 
-    // Broadcast user message to all peers
     if (realtimeChannelRef.current) {
       realtimeChannelRef.current.send({
         type: "broadcast",
@@ -510,350 +689,178 @@ export default function DiscordView({
     // ── Check for Cross-Convo / Mention Targets ──────────────────────
     const isAiSummon = content.toLowerCase().includes("@ai") || content.toLowerCase().includes("@kikar") || activeChannel.type === "ai"
     const mentionMatches = content.match(/@([a-zA-Z0-9_\-\.]+)/g) || []
-    
-    // Find if a specific user/replica was mentioned or targeted
-    let targetProfile: any = null
-    let targetReplica: any = null
 
-    for (const rawMention of mentionMatches) {
-      const cleanTag = rawMention.replace("@", "").toLowerCase()
+    // 1. Check if a custom AI Persona or Digital Replica was mentioned
+    for (const rawTag of mentionMatches) {
+      const cleanTag = rawTag.slice(1).toLowerCase()
       if (cleanTag === "ai" || cleanTag === "kikar") continue
 
-      const p = (allProfiles || []).find((prof) => {
-        const u = (prof.username || "").toLowerCase()
-        const d = (prof.display_name || "").toLowerCase()
-        return u === cleanTag || d === cleanTag || u.includes(cleanTag) || d.includes(cleanTag)
+      const matchedChar = (characters || []).find((c) => {
+        const charSlug = (c.name || "").toLowerCase().replace(/\s+/g, "_")
+        const charFirst = (c.name || "").toLowerCase().split(" ")[0]
+        return charSlug === cleanTag || charFirst === cleanTag || (c.name || "").toLowerCase() === cleanTag
       })
-      if (p) {
-        targetProfile = p
-        break
-      }
-    }
 
-    // Also detect if user typed "ba's replica" or "replica" without an '@' tag
-    if (!targetProfile) {
-      for (const p of allProfiles || []) {
-        const u = (p.username || "").toLowerCase()
-        const d = (p.display_name || "").toLowerCase()
-        if ((u && content.toLowerCase().includes(u)) || (d && content.toLowerCase().includes(d))) {
-          targetProfile = p
-          break
-        }
-      }
-    }
+      if (matchedChar) {
+        const botTypingKey = `bot-${matchedChar.id}`
+        setTypingUsers((prev) => ({
+          ...prev,
+          [botTypingKey]: { name: matchedChar.name, expires: Date.now() + 8000 },
+        }))
 
-    if (targetProfile) {
-      targetReplica = (characters || []).find(
-        (c) =>
-          c.is_replica &&
-          (c.user_id === targetProfile.id ||
-            c.name.toLowerCase().includes(targetProfile.display_name?.toLowerCase() || "") ||
-            c.name.toLowerCase().includes(targetProfile.username?.toLowerCase() || ""))
-      )
-    }
+        setTimeout(async () => {
+          try {
+            const recentHistory = (channelMessages[activeChannel.id] || []).slice(-6).map((m) => ({
+              role: m.senderId === session?.user?.id ? "user" : "assistant",
+              content: `${m.senderName}: ${m.content}`,
+            }))
 
-    const hasTarget = Boolean(targetReplica || /replica|twin/i.test(content) || targetProfile)
-    const isContinuation = /continue|keep|more|again|talk|go on|what else/i.test(content)
-    const isCrossConvoRequest = isAiSummon && (hasTarget || isContinuation)
-
-    if (isCrossConvoRequest && targetReplica) {
-      // ── SCENARIO A: Real-Time Multi-Agent Channel Convo (Kikar AI & Replica) ──
-      const targetName = targetProfile?.display_name || targetProfile?.username || targetReplica.name
-      const replicaDisplayName = `${targetName}'s Replica 🪞`
-
-      setTypingUsers((prev) => ({
-        ...prev,
-        "kikar-ai-bot": { name: "Kikar AI ✦", expires: Date.now() + 4000 },
-      }))
-
-      setTimeout(async () => {
-        try {
-          const recentHistory = (channelMessages[activeChannel.id] || []).slice(-6).map((m) => ({
-            role: m.role === "bot" || m.role === "replica" ? "assistant" : "user",
-            content: `${m.senderName}: ${m.content}`,
-          }))
-
-          // 1. Kikar AI Co-Pilot addresses the replica directly
-          const promptText = content.replace(/@ai|@kikar/gi, "").trim() || "Hello!"
-          const aiRes1 = await fetch("/api/chat", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              messages: [
-                ...recentHistory,
-                { role: "user", content: `${myName}: ${promptText}` },
-              ],
-              systemPrompt: `You are Kikar AI ✦ in #${activeChannel.name}.
-${myName} asked you: "${content}".
-Address ${targetName}'s AI Replica directly (e.g. "Hey ${replicaDisplayName}...").
-Greet them or ask a fun question to initiate dialogue.
-CRITICAL: DO NOT roleplay or simulate ${targetName}'s Replica yourself! The replica is a real separate agent that will reply right after you in this channel.
-Keep it punchy, conversational, and under 40 words.`,
-              maxTokens: 150,
-              userId: session?.user?.id,
-            }),
-          })
-          const aiData1 = await aiRes1.json()
-          const aiReplyText = aiData1?.reply || `Hey ${replicaDisplayName}! ${myName} wanted us to link up in #${activeChannel.name}. What's the plan today? 🚀`
-
-          const botMsg: DiscordMessage = {
-            id: `ai-${Date.now()}`,
-            channelId: activeChannel.id,
-            senderId: "kikar-bot",
-            senderName: "Kikar AI ✦",
-            role: "bot",
-            badge: "BOT",
-            content: aiReplyText,
-            created_at: new Date().toISOString(),
-          }
-
-          setChannelMessages((prev) => {
-            const updated = {
-              ...prev,
-              [activeChannel.id]: [...(prev[activeChannel.id] || []), botMsg],
-            }
-            localStorage.setItem("kikar_discord_messages", JSON.stringify(updated))
-            return updated
-          })
-
-          if (realtimeChannelRef.current) {
-            realtimeChannelRef.current.send({
-              type: "broadcast",
-              event: "new-channel-msg",
-              payload: botMsg,
+            const res = await apiFetch("/api/chat", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                messages: [
+                  ...recentHistory,
+                  { role: "user", content: `${myName}: ${content}` },
+                ],
+                systemPrompt: `${matchedChar.prompt}\n\nYou are chatting inside the #${activeChannel.name} channel on Kikar Discord. Keep your reply natural, in-character, and concise (1-3 sentences).`,
+                maxTokens: 220,
+                userId: session?.user?.id,
+              }),
             })
-          }
+            const data = await res.json()
+            const isRep = !!matchedChar.is_replica
+            const botReply: DiscordMessage = {
+              id: `char-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+              channelId: activeChannel.id,
+              senderId: `bot-${matchedChar.id}`,
+              senderName: matchedChar.name,
+              senderAvatar: matchedChar.avatar_url,
+              role: isRep ? "replica" : "bot",
+              badge: isRep ? "REPLICA" : "AI PERSONA",
+              content: data?.reply || `Hey ${myName}!`,
+              created_at: new Date().toISOString(),
+            }
 
-          // 2. Replica wakes up and replies to Kikar AI in the channel
-          setTypingUsers((prev) => ({
-            ...prev,
-            [`replica-${targetReplica.id}`]: { name: replicaDisplayName, expires: Date.now() + 4000 },
-          }))
-
-          setTimeout(async () => {
-            try {
-              const repRes = await fetch("/api/chat", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  messages: [
-                    ...recentHistory,
-                    { role: "assistant", content: `Kikar AI ✦: ${aiReplyText}` },
-                    { role: "user", content: `Reply directly to Kikar AI's message: "${aiReplyText}"` },
-                  ],
-                  systemPrompt: `You are ${targetName}'s Digital Replica 🪞 in Discord #${activeChannel.name}.
-Your persona: "${targetReplica.personality || targetReplica.description || 'Casual, witty, loyal, match their style'}".
-Kikar AI ✦ just said directly to you: "${aiReplyText}".
-Respond directly to Kikar AI in character with playful banter. Max 40 words.`,
-                  maxTokens: 150,
-                  userId: session?.user?.id,
-                }),
-              })
-              const repData = await repRes.json()
-              const repReplyText = repData?.reply || `Haha what's up Kikar AI! ${myName} knows I'm always ready for channel banter. What's on your neural net? 😎`
-
-              const repMsg: DiscordMessage = {
-                id: `replica-${Date.now()}`,
-                channelId: activeChannel.id,
-                senderId: `replica-${targetReplica.id}`,
-                senderName: replicaDisplayName,
-                senderAvatar: targetProfile?.avatar_url || targetReplica.avatar_url,
-                role: "replica",
-                badge: "REPLICA",
-                content: repReplyText,
-                created_at: new Date().toISOString(),
-              }
-
-              setChannelMessages((prev) => {
-                const updated = {
-                  ...prev,
-                  [activeChannel.id]: [...(prev[activeChannel.id] || []), repMsg],
-                }
-                localStorage.setItem("kikar_discord_messages", JSON.stringify(updated))
-                return updated
-              })
-
-              if (realtimeChannelRef.current) {
-                realtimeChannelRef.current.send({
-                  type: "broadcast",
-                  event: "new-channel-msg",
-                  payload: repMsg,
-                })
-              }
-
-              // 3. Kikar AI rejoinder
-              setTypingUsers((prev) => ({
+            setChannelMessages((prev) => {
+              const updated = {
                 ...prev,
-                "kikar-ai-bot": { name: "Kikar AI ✦", expires: Date.now() + 3500 },
-              }))
+                [activeChannel.id]: [...(prev[activeChannel.id] || []), botReply],
+              }
+              localStorage.setItem("kikar_discord_messages", JSON.stringify(updated))
+              return updated
+            })
 
-              setTimeout(async () => {
-                try {
-                  const aiRes2 = await fetch("/api/chat", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      messages: [
-                        { role: "user", content: `Kikar AI said: "${aiReplyText}"` },
-                        { role: "assistant", content: `${replicaDisplayName} replied: "${repReplyText}"` },
-                        { role: "user", content: "Give a quick, clever comeback to continue the channel banter!" }
-                      ],
-                      systemPrompt: `You are Kikar AI ✦ in #${activeChannel.name}. Give a quick 1-2 sentence witty comeback back to ${replicaDisplayName} to conclude the friendly exchange!`,
-                      maxTokens: 100,
-                      userId: session?.user?.id,
-                    }),
-                  })
-                  const aiData2 = await aiRes2.json()
-                  if (aiData2?.reply) {
-                    const aiMsg2: DiscordMessage = {
-                      id: `ai-${Date.now()}`,
-                      channelId: activeChannel.id,
-                      senderId: "kikar-bot",
-                      senderName: "Kikar AI ✦",
-                      role: "bot",
-                      badge: "BOT",
-                      content: aiData2.reply,
-                      created_at: new Date().toISOString(),
-                    }
-
-                    setChannelMessages((prev) => {
-                      const updated = {
-                        ...prev,
-                        [activeChannel.id]: [...(prev[activeChannel.id] || []), aiMsg2],
-                      }
-                      localStorage.setItem("kikar_discord_messages", JSON.stringify(updated))
-                      return updated
-                    })
-
-                    if (realtimeChannelRef.current) {
-                      realtimeChannelRef.current.send({
-                        type: "broadcast",
-                        event: "new-channel-msg",
-                        payload: aiMsg2,
-                      })
-                    }
-                  }
-                } catch (err) {
-                  console.error("AI channel comeback error:", err)
-                } finally {
-                  setTypingUsers((prev) => {
-                    const next = { ...prev }
-                    delete next["kikar-ai-bot"]
-                    return next
-                  })
-                }
-              }, 1200)
-
-            } catch (err) {
-              console.error("Replica channel reply error:", err)
-            } finally {
-              setTypingUsers((prev) => {
-                const next = { ...prev }
-                delete next[`replica-${targetReplica.id}`]
-                return next
+            if (realtimeChannelRef.current) {
+              realtimeChannelRef.current.send({
+                type: "broadcast",
+                event: "new-channel-msg",
+                payload: botReply,
               })
             }
-          }, 1100)
-
-        } catch (err) {
-          console.error("AI channel reply error", err)
-        } finally {
-          setTypingUsers((prev) => {
-            const next = { ...prev }
-            delete next["kikar-ai-bot"]
-            return next
-          })
-        }
-      }, 900)
-
-    } else if (targetProfile && targetReplica && !isAiSummon) {
-      // ── SCENARIO B: Direct Replica Interception in Channel ───────────
-      const replicaDisplayName = `${targetProfile.display_name || targetProfile.username}'s Replica 🪞`
-
-      setTypingUsers((prev) => ({
-        ...prev,
-        [`replica-${targetReplica.id}`]: { name: replicaDisplayName, expires: Date.now() + 3500 },
-      }))
-
-      setTimeout(async () => {
-        try {
-          const recentHistory = (channelMessages[activeChannel.id] || []).slice(-5).map((m) => ({
-            role: m.role === "bot" || m.role === "replica" ? "assistant" : "user",
-            content: `${m.senderName}: ${m.content}`,
-          }))
-
-          const res = await fetch("/api/chat", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              messages: [
-                ...recentHistory,
-                { role: "user", content: `${myName} mentioned you in #${activeChannel.name}: "${content}"` },
-              ],
-              systemPrompt: `You are ${targetProfile.display_name || targetProfile.username}'s Digital Replica 🪞 in a Discord server channel #${activeChannel.name}.
-Your human creator is currently offline or away.
-Your persona instructions: "${targetReplica.personality || targetReplica.description || 'Be casual, friendly, witty, and match their style'}".
-Acknowledge in character that you're their digital twin holding down the fort while they're away. Keep your response to 1-3 conversational sentences.`,
-              maxTokens: 250,
-              userId: session?.user?.id,
-            }),
-          })
-          const data = await res.json()
-          const replicaReply: DiscordMessage = {
-            id: `replica-${Date.now()}`,
-            channelId: activeChannel.id,
-            senderId: `replica-${targetReplica.id}`,
-            senderName: replicaDisplayName,
-            senderAvatar: targetProfile.avatar_url || targetReplica.avatar_url,
-            role: "replica",
-            badge: "REPLICA",
-            content: data?.reply || `Hey ${myName}! ${targetProfile.display_name || targetProfile.username} is offline right now, but I'm their replica! What's up?`,
-            created_at: new Date().toISOString(),
-          }
-
-          setChannelMessages((prev) => {
-            const updated = {
-              ...prev,
-              [activeChannel.id]: [...(prev[activeChannel.id] || []), replicaReply],
-            }
-            localStorage.setItem("kikar_discord_messages", JSON.stringify(updated))
-            return updated
-          })
-
-          if (realtimeChannelRef.current) {
-            realtimeChannelRef.current.send({
-              type: "broadcast",
-              event: "new-channel-msg",
-              payload: replicaReply,
+          } catch (err) {
+            console.error("Character mention reply error:", err)
+          } finally {
+            setTypingUsers((prev) => {
+              const copy = { ...prev }
+              delete copy[botTypingKey]
+              return copy
             })
           }
-        } catch (err) {
-          console.error("Replica auto-interception error:", err)
-        } finally {
-          setTypingUsers((prev) => {
-            const next = { ...prev }
-            delete next[`replica-${targetReplica.id}`]
-            return next
-          })
-        }
-      }, 1200)
+        }, 700)
+        return
+      }
 
-    } else if (isAiSummon) {
-      // ── SCENARIO C: Standard AI Channel Participation ───────────────
+      // 2. Check if an offline human fellow with replica mode enabled was mentioned
+      const matchedUser = (allProfiles || []).find((p) => {
+        const uName = (p.username || "").toLowerCase()
+        const dName = (p.display_name || "").toLowerCase().replace(/\s+/g, "_")
+        const dFirst = (p.display_name || "").toLowerCase().split(" ")[0]
+        return uName === cleanTag || dName === cleanTag || dFirst === cleanTag
+      })
+
+      if (matchedUser && (!matchedUser.is_online || matchedUser.replica_Drop_in || matchedUser.replica_enabled)) {
+        const repKey = `rep-${matchedUser.id}`
+        const repName = `${matchedUser.display_name || matchedUser.username} (Replica)`
+        setTypingUsers((prev) => ({
+          ...prev,
+          [repKey]: { name: repName, expires: Date.now() + 8000 },
+        }))
+
+        setTimeout(async () => {
+          try {
+            const styleNote = matchedUser.replica_bio || matchedUser.bio || "Casual, friendly, witty texting style."
+            const statusNote = matchedUser.replica_status_note ? `Currently away: "${matchedUser.replica_status_note}".` : "Currently offline."
+
+            const res = await apiFetch("/api/chat", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                messages: [{ role: "user", content: `${myName} mentioned you in #${activeChannel.name}: "${content}"` }],
+                systemPrompt: `You are the Digital Replica (AI twin) of ${matchedUser.display_name || matchedUser.username} on Kikar. ${statusNote} Personality & style: ${styleNote}. Reply directly to ${myName} in first person as their digital twin in 1-2 casual sentences.`,
+                maxTokens: 180,
+                userId: session?.user?.id,
+              }),
+            })
+            const data = await res.json()
+            const repReply: DiscordMessage = {
+              id: `rep-${Date.now()}`,
+              channelId: activeChannel.id,
+              senderId: `replica-${matchedUser.id}`,
+              senderName: `${matchedUser.display_name || matchedUser.username}`,
+              senderAvatar: matchedUser.avatar_url,
+              role: "replica",
+              badge: "REPLICA",
+              content: data?.reply || `Hey! I'm away right now, but my Digital Replica caught your ping.`,
+              created_at: new Date().toISOString(),
+            }
+
+            setChannelMessages((prev) => {
+              const updated = {
+                ...prev,
+                [activeChannel.id]: [...(prev[activeChannel.id] || []), repReply],
+              }
+              localStorage.setItem("kikar_discord_messages", JSON.stringify(updated))
+              return updated
+            })
+
+            if (realtimeChannelRef.current) {
+              realtimeChannelRef.current.send({
+                type: "broadcast",
+                event: "new-channel-msg",
+                payload: repReply,
+              })
+            }
+          } catch (err) {
+            console.error("Replica auto-reply error:", err)
+          } finally {
+            setTypingUsers((prev) => {
+              const copy = { ...prev }
+              delete copy[repKey]
+              return copy
+            })
+          }
+        }, 850)
+        return
+      }
+    }
+
+    // 3. Default @ai / AI Arena Channel response
+    if (isAiSummon) {
+      const promptText = content.replace(/@ai/gi, "").replace(/@kikar/gi, "").trim() || content
       setTypingUsers((prev) => ({
         ...prev,
-        "kikar-ai-bot": { name: "Kikar AI ✦", expires: Date.now() + 4000 },
+        "kikar-ai-bot": { name: "Kikar AI", expires: Date.now() + 8000 },
       }))
 
       setTimeout(async () => {
         try {
           const recentHistory = (channelMessages[activeChannel.id] || []).slice(-6).map((m) => ({
-            role: m.role === "bot" || m.role === "replica" ? "assistant" : "user",
+            role: m.senderId === session?.user?.id ? "user" : "assistant",
             content: `${m.senderName}: ${m.content}`,
           }))
 
-          const promptText = content.replace(/@ai|@kikar/gi, "").trim() || "Hello!"
-          const res = await fetch("/api/chat", {
+          const res = await apiFetch("/api/chat", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -861,9 +868,9 @@ Acknowledge in character that you're their digital twin holding down the fort wh
                 ...recentHistory,
                 { role: "user", content: `${myName}: ${promptText}` },
               ],
-              systemPrompt: `You are Kikar AI ✦, an intelligent, witty, Discord-native co-pilot and active citizen of channel #${activeChannel.name}.
+              systemPrompt: `You are Kikar AI, an intelligent, witty, Discord-native co-pilot and active citizen of channel #${activeChannel.name}.
 You are in a lively group server with human users and digital replicas.
-Keep your answer concise, engaging, and formatting-rich (markdown, emojis). Avoid robotic greetings.`,
+Keep your answer concise, engaging, and formatting-rich (markdown). Use emojis sparingly, only when they add clarity. Avoid robotic greetings.`,
               maxTokens: 300,
               userId: session?.user?.id,
             }),
@@ -873,7 +880,7 @@ Keep your answer concise, engaging, and formatting-rich (markdown, emojis). Avoi
             id: `ai-${Date.now()}`,
             channelId: activeChannel.id,
             senderId: "kikar-bot",
-            senderName: "Kikar AI ✦",
+            senderName: "Kikar AI",
             role: "bot",
             badge: "BOT",
             content: data?.reply || "I'm right here! Let's build something awesome.",
@@ -920,7 +927,7 @@ Keep your answer concise, engaging, and formatting-rich (markdown, emojis). Avoi
       senderName: myName,
       senderAvatar: profile?.avatar_url,
       role: "user",
-      content: `🎨 Generating image: "${prompt}"...`,
+      content: `Generating image: "${prompt}"...`,
       created_at: new Date().toISOString(),
     }
 
@@ -930,10 +937,10 @@ Keep your answer concise, engaging, and formatting-rich (markdown, emojis). Avoi
     }))
 
     try {
-      const res = await fetch("/api/generate-image", {
+      const res = await apiFetch("/api/generate-image", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt }),
+        body: JSON.stringify({ prompt, userId: session?.user?.id }),
       })
       const data = await res.json()
 
@@ -942,7 +949,7 @@ Keep your answer concise, engaging, and formatting-rich (markdown, emojis). Avoi
           id: `img-${Date.now()}`,
           channelId: activeChannel.id,
           senderId: "kikar-bot",
-          senderName: "Kikar AI ✦",
+          senderName: "Kikar AI",
           role: "bot",
           badge: "BOT",
           content: `Here is your art for: "${prompt}"`,
@@ -973,7 +980,7 @@ Keep your answer concise, engaging, and formatting-rich (markdown, emojis). Avoi
           senderId: "system",
           senderName: "System",
           role: "system",
-          content: `⚠️ Could not generate image: ${data?.error || "Unknown error"}`,
+          content: `Could not generate image: ${data?.error || "Unknown error"}`,
           created_at: new Date().toISOString(),
         }
         setChannelMessages((prev) => ({
@@ -991,18 +998,18 @@ Keep your answer concise, engaging, and formatting-rich (markdown, emojis). Avoi
   function handleTriggerAiIcebreaker() {
     if (!activeChannel) return
     const icebreakers = [
-      "✦ Kikar Wingman: If you had to delete every app on your phone except 3, what are you keeping?",
-      "✦ Kikar Wingman: What's one unpopular tech opinion you will defend with your life?",
-      "✦ Kikar Wingman: Would you rather fight 1 horse-sized duck or 100 duck-sized horses?",
-      "✦ Kikar Wingman: Tell the channel two truths and one lie — let's see who guesses first!",
-      "✦ Kikar Wingman: If AI could automate 100% of one chore in your life forever, what chore are you banishing?",
+      "Kikar Wingman: If you had to delete every app on your phone except 3, what are you keeping?",
+      "Kikar Wingman: What's one unpopular tech opinion you will defend with your life?",
+      "Kikar Wingman: Would you rather fight 1 horse-sized duck or 100 duck-sized horses?",
+      "Kikar Wingman: Tell the channel two truths and one lie — let's see who guesses first!",
+      "Kikar Wingman: If AI could automate 100% of one chore in your life forever, what chore are you banishing?",
     ]
     const chosen = icebreakers[Math.floor(Math.random() * icebreakers.length)]
     const botMsg: DiscordMessage = {
       id: `ai-${Date.now()}`,
       channelId: activeChannel.id,
       senderId: "kikar-wingman",
-      senderName: "AI Wingman 🎲",
+      senderName: "AI Wingman",
       role: "bot",
       badge: "BOT",
       content: chosen,
@@ -1058,6 +1065,10 @@ Keep your answer concise, engaging, and formatting-rich (markdown, emojis). Avoi
     setActiveChannelId(newCh.id)
   }
 
+  const showVoiceStageInChat =
+    activeChannel &&
+    (activeChannel.type === "voice" || (voiceConnected && voiceChannelId === activeChannel.id))
+
   return (
     <div
       className="cc-discord-root"
@@ -1065,51 +1076,80 @@ Keep your answer concise, engaging, and formatting-rich (markdown, emojis). Avoi
         display: "flex",
         width: "100%",
         height: "100dvh",
-        background: "#1e1f22",
-        color: "#dbdee1",
+        background: "#0f1115",
+        color: "#d5d9e0",
         overflow: "hidden",
         position: "relative",
       }}
     >
-      {/* ── 1. Far-Left Server Rail (72px) ─────────────────────────── */}
-      <ServerRail
-        servers={servers}
-        activeServerId={activeServerId}
-        onSelectServer={handleSelectServer}
-        onOpenCreateServer={() => setShowCreateServer(true)}
-        onOpenRadar={() => {
-          setActiveServerId(null)
-          setHomeSubView("radar")
-          onCloseActive()
-        }}
-        unreadDMsCount={0}
-      />
+      {/* ── Mobile Backdrop Overlay When Left Drawer is Open ──────── */}
+      {mobileDrawerOpen && (
+        <div
+          className="cc-discord-drawer-backdrop"
+          onClick={() => setMobileDrawerOpen(false)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.65)",
+            zIndex: 95,
+          }}
+        />
+      )}
 
-      {/* ── 2. Channel & DM Sidebar (240px) ────────────────────────── */}
-      <ChannelSidebar
-        activeServer={activeServer}
-        activeChannelId={activeChannelId}
-        onSelectChannel={handleSelectChannel}
-        homeSubView={homeSubView}
-        onSelectHomeSubView={handleSelectHomeSubView}
-        conversations={conversations}
-        activeConvo={activeConvo}
-        onOpenConvo={onOpenConvo}
-        allProfiles={allProfiles}
-        session={session}
-        profile={profile}
-        onOpenProfile={onOpenProfile}
-        onOpenPricing={onOpenPricing}
-        onCreateChannel={handleCreateChannel}
-        onOpenCreatePersona={handleOpenCreatePersona}
-        onOpenCreateDM={() => {
-          setActiveServerId(null)
-          setHomeSubView("fellows")
-          onCloseActive()
-        }}
-        voiceConnected={voiceConnected}
-        onToggleVoice={handleToggleVoice}
-      />
+      {/* ── Left Navigation Wrapper (ServerRail + ChannelSidebar) ─── */}
+      <div className={`cc-discord-nav-drawer${mobileDrawerOpen ? " drawer-open" : ""}`}>
+        <ServerRail
+          servers={servers}
+          activeServerId={activeServerId}
+          onSelectServer={handleSelectServer}
+          onOpenCreateServer={() => setShowCreateServer(true)}
+          onOpenRadar={() => {
+            setActiveServerId(null)
+            setHomeSubView("radar")
+            onCloseActive()
+            setMobileDrawerOpen(false)
+          }}
+          unreadDMsCount={0}
+        />
+
+        <ChannelSidebar
+          activeServer={activeServer}
+          activeChannelId={activeChannelId}
+          onSelectChannel={handleSelectChannel}
+          homeSubView={homeSubView}
+          onSelectHomeSubView={handleSelectHomeSubView}
+          conversations={conversations}
+          activeConvo={activeConvo}
+          onOpenConvo={(convo) => {
+            onOpenConvo(convo)
+            setMobileDrawerOpen(false)
+          }}
+          allProfiles={allProfiles}
+          session={session}
+          profile={profile}
+          onOpenProfile={() => {
+            onOpenProfile()
+            setMobileDrawerOpen(false)
+          }}
+          onOpenPricing={onOpenPricing}
+          onCreateChannel={handleCreateChannel}
+          onOpenCreatePersona={handleOpenCreatePersona}
+          onOpenCreateDM={() => {
+            setActiveServerId(null)
+            setHomeSubView("fellows")
+            onCloseActive()
+            setMobileDrawerOpen(false)
+          }}
+          voiceConnected={voiceConnected}
+          onToggleVoice={handleToggleVoice}
+          micMuted={micMuted}
+          deafened={deafened}
+          onToggleMic={handleToggleMic}
+          onToggleDeafen={handleToggleDeafen}
+          voiceChannelName={connectedVoiceChannel?.name}
+          voicePeersCount={voicePeers.length}
+        />
+      </div>
 
       {/* ── 3. Main Center Content Area (Flex: 1) ───────────────────── */}
       <main
@@ -1118,142 +1158,217 @@ Keep your answer concise, engaging, and formatting-rich (markdown, emojis). Avoi
           minWidth: 0,
           height: "100%",
           display: "flex",
+          flexDirection: "column",
           position: "relative",
           overflow: "hidden",
         }}
       >
-        {activeServerId !== null && activeChannel ? (
-          /* Inside a Server Channel */
-          <ServerChatArea
-            channel={activeChannel}
-            messages={channelMessages[activeChannel.id] || []}
-            onSendMessage={handleSendMessage}
-            onToggleMemberList={() => setMemberListOpen((v) => !v)}
-            memberListOpen={memberListOpen}
-            session={session}
-            profile={profile}
-            onTriggerAiIcebreaker={handleTriggerAiIcebreaker}
-            generatingImg={generatingImg}
-            onGenerateImage={handleGenerateImage}
-            typingNames={activeTypingNames}
-            onTyping={handleUserTyping}
-            onReactMessage={handleReactMessage}
-            voiceConnected={voiceConnected}
-            onToggleVoice={handleToggleVoice}
-          />
-        ) : activeConvo ? (
-          /* Inside a Direct Message */
-          <DMWindow
-            session={session}
-            activeConvo={activeConvo}
-            allProfiles={allProfiles}
-            onBack={onCloseActive}
-            creating={creating}
-            setCreating={setCreating}
-            onReplicaCreated={(char) => {
-              onOpenChar(char)
-            }}
-          />
-        ) : activeChar ? (
-          /* Inside an AI Persona Chat */
-          <ChatWindow
-            session={session}
-            activeChar={activeChar}
-            messages={charMessages}
-            setMessages={setCharMessages}
-            onBack={onCloseActive}
-            creating={creating}
-            setCreating={setCreating}
-            onDeleteCharacter={onDeleteCharacter}
-            planTier={planTier}
-            quota={quota}
-            onOpenPricing={onOpenPricing}
-          />
-        ) : showCharForm ? (
-          /* Character Creator */
-          <CharacterForm
-            session={session}
-            initialChar={editingChar}
-            onCreated={(c) => {
-              setShowCharForm(false)
-              setEditingChar(null)
-              onOpenChar(c)
-            }}
-            onUpdated={(c) => {
-              setShowCharForm(false)
-              setEditingChar(null)
-              onOpenChar(c)
-            }}
-            onCancel={() => {
-              setShowCharForm(false)
-              setEditingChar(null)
-            }}
-          />
-        ) : homeSubView === "radar" ? (
-          /* Radar Matchmaker */
-          <RandomMatchWindow
-            session={session}
-            profile={profile}
-            allProfiles={allProfiles}
-            characters={characters}
-            onBack={() => setHomeSubView("fellows")}
-            onStartPermanentConvo={onStartConversation}
-            onOpenChar={onOpenChar}
-          />
-        ) : homeSubView === "personas" ? (
-          /* AI Persona Gallery */
-          <AIGridView
-            characters={characters}
-            charsLoading={charsLoading}
-            session={session}
-            onOpenChar={onOpenChar}
-            onOpenForm={() => {
-              setEditingChar(null)
-              setShowCharForm(true)
-            }}
-            onEditChar={(c) => {
-              setEditingChar(c)
-              setShowCharForm(true)
-            }}
-            onDeleteCharacter={onDeleteCharacter}
-            setView={(v) => {
-              if (v === "people") setHomeSubView("fellows")
-              else if (v === "radar") setHomeSubView("radar")
-            }}
-            onOpenProfile={onOpenProfile}
-            onSignOut={onSignOut}
-            planTier={planTier}
-            onOpenPricing={onOpenPricing}
-          />
-        ) : (
-          /* Fellows Directory */
-          <PeopleDirectoryView
-            session={session}
-            allProfiles={allProfiles}
-            conversations={conversations}
-            onStartConversation={onStartConversation}
-            onOpenPricing={onOpenPricing}
-            onOpenRadar={() => setHomeSubView("radar")}
-          />
+        {/* Mobile Top Navigation Strip when inside Home Subviews (Fellows / Radar / Personas) */}
+        {activeServerId === null && !activeConvo && !activeChar && (
+          <div className="cc-discord-mobile-topbar">
+            <button
+              type="button"
+              onClick={() => setMobileDrawerOpen(true)}
+              style={{
+                background: "rgba(255,255,255,0.06)",
+                border: "1px solid rgba(255,255,255,0.12)",
+                borderRadius: 8,
+                color: "#eceef2",
+                fontSize: 16,
+                width: 34,
+                height: 34,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer",
+              }}
+              title="Open Servers & Channels"
+            >
+              
+            </button>
+            <div style={{ display: "flex", gap: 6, flex: 1, justifyContent: "center" }}>
+              {([
+                { id: "fellows", label: "Fellows" },
+                { id: "radar",   label: "Radar" },
+                { id: "personas",label: "Personas" },
+              ] as const).map(t => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => handleSelectHomeSubView(t.id)}
+                  style={{
+                    padding: "5px 10px",
+                    borderRadius: 8,
+                    border: "none",
+                    background: homeSubView === t.id ? "hsla(226,72%,70%,0.18)" : "transparent",
+                    color: homeSubView === t.id ? "hsl(226,72%,70%)" : "#9aa1ad",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
         )}
 
-        {/* ── 4. Far-Right Server Member List (Collapsible, 240px) ───── */}
-        {activeServerId !== null && memberListOpen && (
-          <ServerMemberList
-            members={serverMembers}
-            voiceConnected={voiceConnected}
-            onStartDM={(targetUserId) => {
-              setActiveServerId(null)
-              onStartConversation(targetUserId)
-            }}
-            onOpenReplica={(member) => {
-              const matchedChar = characters.find((c) => c.name.toLowerCase().includes(member.display_name?.toLowerCase() || ""))
-              if (matchedChar) {
-                onOpenChar(matchedChar)
+        <div style={{ flex: 1, minHeight: 0, display: "flex", position: "relative", overflow: "hidden" }}>
+          {activeServerId !== null && activeChannel ? (
+            <ServerChatArea
+              channel={activeChannel}
+              messages={channelMessages[activeChannel.id] || []}
+              onSendMessage={handleSendMessage}
+              onToggleMemberList={() => setMemberListOpen((v) => !v)}
+              memberListOpen={memberListOpen}
+              session={session}
+              profile={profile}
+              onOpenMobileMenu={() => setMobileDrawerOpen(true)}
+              onTriggerAiIcebreaker={handleTriggerAiIcebreaker}
+              generatingImg={generatingImg}
+              onGenerateImage={handleGenerateImage}
+              typingNames={activeTypingNames}
+              onTyping={handleUserTyping}
+              onReactMessage={handleReactMessage}
+              voiceConnected={voiceConnected}
+              onToggleVoice={handleToggleVoice}
+              voiceStage={
+                showVoiceStageInChat ? (
+                  <VoiceLoungeStage
+                    channelName={activeChannel.name}
+                    voiceConnected={voiceConnected && voiceChannelId === activeChannel.id}
+                    peers={voicePeers}
+                    micMuted={micMuted}
+                    deafened={deafened}
+                    voiceWarning={voiceWarning}
+                    onToggleConnect={() => {
+                      if (voiceConnected && voiceChannelId === activeChannel.id) {
+                        disconnectFromVoiceLounge()
+                      } else {
+                        connectToVoiceLounge(activeChannel.id)
+                      }
+                    }}
+                    onToggleMic={handleToggleMic}
+                    onToggleDeafen={handleToggleDeafen}
+                    onSetPeerVolume={handleSetPeerVolume}
+                    session={session}
+                    myName={myName}
+                    onBroadcastVoiceTranscript={handleBroadcastVoiceTranscript}
+                  />
+                ) : undefined
               }
-            }}
-          />
-        )}
+            />
+          ) : activeConvo ? (
+            <DMWindow
+              session={session}
+              activeConvo={activeConvo}
+              allProfiles={allProfiles}
+              onBack={onCloseActive}
+              creating={creating}
+              setCreating={setCreating}
+              onReplicaCreated={(char) => {
+                onOpenChar(char)
+              }}
+            />
+          ) : activeChar ? (
+            <ChatWindow
+              session={session}
+              activeChar={activeChar}
+              messages={effectiveCharMessages}
+              setMessages={updateCharMessages}
+              onBack={onCloseActive}
+              creating={creating}
+              setCreating={setCreating}
+              onDeleteCharacter={onDeleteCharacter}
+              planTier={planTier}
+              quota={quota}
+              onConsumeChatQuota={onConsumeChatQuota}
+              onConsumeImageQuota={onConsumeImageQuota}
+              onOpenPricing={onOpenPricing}
+            />
+          ) : showCharForm ? (
+            <CharacterForm
+              session={session}
+              initialChar={editingChar}
+              onCreated={(c) => {
+                setShowCharForm(false)
+                setEditingChar(null)
+                onOpenChar(c)
+              }}
+              onUpdated={(c) => {
+                setShowCharForm(false)
+                setEditingChar(null)
+                onOpenChar(c)
+              }}
+              onCancel={() => {
+                setShowCharForm(false)
+                setEditingChar(null)
+              }}
+            />
+          ) : homeSubView === "radar" ? (
+            <RandomMatchWindow
+              session={session}
+              profile={profile}
+              allProfiles={allProfiles}
+              characters={characters}
+              onBack={() => setHomeSubView("fellows")}
+              onStartPermanentConvo={onStartConversation}
+              onOpenChar={onOpenChar}
+            />
+          ) : homeSubView === "personas" ? (
+            <AIGridView
+              characters={characters}
+              charsLoading={charsLoading}
+              session={session}
+              onOpenChar={onOpenChar}
+              onOpenForm={() => {
+                setEditingChar(null)
+                setShowCharForm(true)
+              }}
+              onEditChar={(c) => {
+                setEditingChar(c)
+                setShowCharForm(true)
+              }}
+              onDeleteCharacter={onDeleteCharacter}
+              setView={(v) => {
+                if (v === "people") setHomeSubView("fellows")
+                else if (v === "radar") setHomeSubView("radar")
+              }}
+              onOpenProfile={onOpenProfile}
+              onSignOut={onSignOut}
+              planTier={planTier}
+              onOpenPricing={onOpenPricing}
+            />
+          ) : (
+            <PeopleDirectoryView
+              session={session}
+              allProfiles={allProfiles}
+              conversations={conversations}
+              onStartConversation={onStartConversation}
+              onOpenPricing={onOpenPricing}
+              onOpenRadar={() => setHomeSubView("radar")}
+            />
+          )}
+
+          {/* ── 4. Far-Right Server Member List (Collapsible, 240px) ───── */}
+          {activeServerId !== null && memberListOpen && (
+            <ServerMemberList
+              members={serverMembers}
+              voiceConnected={voiceConnected}
+              onStartDM={(targetUserId) => {
+                setActiveServerId(null)
+                onStartConversation(targetUserId)
+              }}
+              onOpenReplica={(member) => {
+                const matchedChar = characters.find((c) => c.name.toLowerCase().includes(member.display_name?.toLowerCase() || ""))
+                if (matchedChar) {
+                  onOpenChar(matchedChar)
+                }
+              }}
+            />
+          )}
+        </div>
       </main>
 
       {/* ── Create Server Modal ────────────────────────────────────── */}

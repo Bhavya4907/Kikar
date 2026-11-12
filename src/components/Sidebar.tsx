@@ -1,6 +1,7 @@
 "use client"
 import { useState, useMemo } from "react"
 import { T } from "../styles"
+import { Icon } from "./Icons"
 
 interface Props {
   session: any
@@ -83,14 +84,14 @@ export default function Sidebar({
             width: 34,
             height: 34,
             borderRadius: 10,
-            background: "hsla(119,99%,46%,0.12)",
-            border: "1px solid hsla(119,99%,46%,0.25)",
+            background: "hsla(226,72%,70%,0.12)",
+            border: "1px solid hsla(226,72%,70%,0.25)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             fontSize: 16,
-            boxShadow: "0 0 16px hsla(119,99%,46%,0.15)",
-          }}>✦</div>
+            boxShadow: "0 0 16px hsla(226,72%,70%,0.15)",
+          }}><Icon name="spark" /></div>
           <div>
             <div style={{
               fontWeight: 700,
@@ -124,7 +125,7 @@ export default function Sidebar({
               alignItems: "center",
               justifyContent: "center",
             }}
-          >👤</button>
+          ><Icon name="user" /></button>
           <button
             type="button"
             onClick={onSignOut}
@@ -163,7 +164,7 @@ export default function Sidebar({
             padding: "8px 12px",
             borderRadius: 8,
             border: "none",
-            background: view === "ai" ? "hsla(119,99%,46%,0.15)" : "transparent",
+            background: view === "ai" ? "hsla(226,72%,70%,0.15)" : "transparent",
             color: view === "ai" ? T.primary : T.muted,
             fontWeight: 700,
             fontSize: 12,
@@ -175,7 +176,7 @@ export default function Sidebar({
             gap: 6,
           }}
         >
-          <span>✦</span> Persona
+          <span><Icon name="spark" /></span> Persona
         </button>
 
         <button
@@ -186,8 +187,8 @@ export default function Sidebar({
             padding: "8px 10px",
             borderRadius: 8,
             border: "none",
-            background: view === "people" ? "rgba(168,85,247,0.18)" : "transparent",
-            color: view === "people" ? "#c084fc" : T.muted,
+            background: view === "people" ? "rgba(139,124,246,0.18)" : "transparent",
+            color: view === "people" ? "#b3a8f8" : T.muted,
             fontWeight: 700,
             fontSize: 11,
             cursor: "pointer",
@@ -198,14 +199,14 @@ export default function Sidebar({
             gap: 4,
           }}
         >
-          <span>👥</span> Fellows
+          <span><Icon name="users" /></span> Fellows
           {onlineProfiles.length > 0 && (
             <span style={{
               width: 6,
               height: 6,
               borderRadius: "50%",
-              background: "#22c55e",
-              boxShadow: "0 0 6px #22c55e",
+              background: "#4fb987",
+              boxShadow: "0 0 6px #4fb987",
             }} />
           )}
         </button>
@@ -219,7 +220,7 @@ export default function Sidebar({
             borderRadius: 8,
             border: "none",
             background: view === "radar" ? "rgba(56,189,248,0.18)" : "transparent",
-            color: view === "radar" ? "#38bdf8" : T.muted,
+            color: view === "radar" ? "#62b5d9" : T.muted,
             fontWeight: 700,
             fontSize: 11,
             cursor: "pointer",
@@ -230,7 +231,7 @@ export default function Sidebar({
             gap: 4,
           }}
         >
-          <span>⚡</span> Radar
+          <span><Icon name="radar" /></span> Radar
         </button>
       </div>
 
@@ -244,7 +245,7 @@ export default function Sidebar({
             style={{
               margin: "12px 14px 6px",
               padding: "10px 14px",
-              background: "linear-gradient(135deg, hsl(119,99%,46%) 0%, hsl(119,99%,38%) 100%)",
+              background: "linear-gradient(135deg, hsl(226,72%,70%) 0%, hsl(226,62%,58%) 100%)",
               border: "none",
               borderRadius: 10,
               color: T.primaryFg,
@@ -255,7 +256,7 @@ export default function Sidebar({
               alignItems: "center",
               justifyContent: "center",
               gap: 6,
-              boxShadow: "0 2px 12px hsla(119,99%,46%,0.25)",
+              boxShadow: "0 2px 12px hsla(226,72%,70%,0.25)",
             }}
           >+ New Character</button>
 
@@ -287,7 +288,7 @@ export default function Sidebar({
                       padding: "12px 14px",
                       cursor: "pointer",
                       borderBottom: `1px solid ${T.border}`,
-                      background: isActive ? "hsla(119,99%,46%,0.08)" : "transparent",
+                      background: isActive ? "hsla(226,72%,70%,0.08)" : "transparent",
                       borderLeft: isActive ? `2px solid ${T.primary}` : "2px solid transparent",
                       transition: "background 0.15s",
                     }}
@@ -297,13 +298,13 @@ export default function Sidebar({
                       width: 40,
                       height: 40,
                       borderRadius: 10,
-                      background: isActive ? "hsla(119,99%,46%,0.15)" : T.bgAlt,
+                      background: isActive ? "hsla(226,72%,70%,0.15)" : T.bgAlt,
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
                       fontSize: 20,
                       flexShrink: 0,
-                      border: isActive ? "1px solid hsla(119,99%,46%,0.3)" : `1px solid ${T.border}`,
+                      border: isActive ? "1px solid hsla(226,72%,70%,0.3)" : `1px solid ${T.border}`,
                     }}>
                       {c.emoji}
                     </div>
@@ -320,8 +321,8 @@ export default function Sidebar({
                         {c.name}
                       </div>
                       {c.is_replica && (
-                        <div style={{ fontSize: 10, color: "#a855f7", marginTop: 2, fontWeight: 600 }}>
-                          🪞 Replica
+                        <div style={{ fontSize: 10, color: "#8b7cf6", marginTop: 2, fontWeight: 600 }}>
+                          Replica
                         </div>
                       )}
                     </div>
@@ -345,7 +346,7 @@ export default function Sidebar({
                             onDeleteCharacter(c.id)
                           }
                         }}
-                      >✕</button>
+                      ></button>
                     )}
                   </div>
                 )
@@ -394,7 +395,7 @@ export default function Sidebar({
                     cursor: "pointer",
                     fontSize: 12,
                   }}
-                >✕</button>
+                ></button>
               )}
             </div>
             <button
@@ -404,7 +405,7 @@ export default function Sidebar({
               style={{
                 width: 36,
                 height: 36,
-                background: `linear-gradient(135deg, ${T.primary}, hsl(119,99%,38%))`,
+                background: `linear-gradient(135deg, ${T.primary}, hsl(226,62%,58%))`,
                 border: "none",
                 borderRadius: 10,
                 color: T.primaryFg,
@@ -428,9 +429,9 @@ export default function Sidebar({
             flexShrink: 0,
           }}>
             {([
-              { id: "online", label: "🟢 Online", count: onlineProfiles.length },
-              { id: "chats",  label: "💬 Chats",  count: conversations.length },
-              { id: "all",    label: "👥 All",    count: (allProfiles || []).length },
+              { id: "online", label: "Online", count: onlineProfiles.length },
+              { id: "chats",  label: "Chats",  count: conversations.length },
+              { id: "all",    label: "All",    count: (allProfiles || []).length },
             ] as const).map(tab => (
               <button
                 key={tab.id}
@@ -441,8 +442,8 @@ export default function Sidebar({
                   padding: "6px 8px",
                   borderRadius: 8,
                   border: "none",
-                  background: peopleFilter === tab.id ? "rgba(168,85,247,0.18)" : "transparent",
-                  color: peopleFilter === tab.id ? "#c084fc" : T.muted,
+                  background: peopleFilter === tab.id ? "rgba(139,124,246,0.18)" : "transparent",
+                  color: peopleFilter === tab.id ? "#b3a8f8" : T.muted,
                   fontSize: 11,
                   fontWeight: peopleFilter === tab.id ? 700 : 500,
                   cursor: "pointer",
@@ -456,7 +457,7 @@ export default function Sidebar({
                 <span>{tab.label}</span>
                 <span style={{
                   fontSize: 9,
-                  background: peopleFilter === tab.id ? "rgba(168,85,247,0.3)" : "rgba(255,255,255,0.06)",
+                  background: peopleFilter === tab.id ? "rgba(139,124,246,0.3)" : "rgba(255,255,255,0.06)",
                   padding: "1px 5px",
                   borderRadius: 999,
                 }}>
@@ -475,7 +476,7 @@ export default function Sidebar({
                 gap: 10,
                 padding: "10px 14px",
                 cursor: "pointer",
-                background: "hsla(119,99%,46%,0.06)",
+                background: "hsla(226,72%,70%,0.06)",
                 borderBottom: `1px solid ${T.border}`,
                 borderLeft: `2px solid ${T.primary}`,
               }}
@@ -485,12 +486,12 @@ export default function Sidebar({
                 {searchResult.avatar_url ? (
                   <img src={searchResult.avatar_url} style={{ width: 38, height: 38, borderRadius: "50%", objectFit: "cover" }} />
                 ) : (
-                  <div style={{ width: 38, height: 38, borderRadius: "50%", background: T.surface, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>👤</div>
+                  <div style={{ width: 38, height: 38, borderRadius: "50%", background: T.surface, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}><Icon name="user" /></div>
                 )}
                 <div style={{
                   position: "absolute", bottom: 0, right: 0,
                   width: 10, height: 10, borderRadius: "50%",
-                  background: searchResult.is_online ? "#22c55e" : T.muted2,
+                  background: searchResult.is_online ? "#4fb987" : T.muted2,
                   border: `2px solid ${T.surface}`,
                 }} />
               </div>
@@ -532,7 +533,7 @@ export default function Sidebar({
                       padding: "10px 14px",
                       cursor: "pointer",
                       borderBottom: `1px solid ${T.border}`,
-                      background: isActive ? "hsla(119,99%,46%,0.08)" : "transparent",
+                      background: isActive ? "hsla(226,72%,70%,0.08)" : "transparent",
                       borderLeft: isActive ? `2px solid ${T.primary}` : "2px solid transparent",
                       transition: "background 0.15s",
                     }}
@@ -542,14 +543,14 @@ export default function Sidebar({
                       {p.avatar_url ? (
                         <img src={p.avatar_url} style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover" }} />
                       ) : (
-                        <div style={{ width: 40, height: 40, borderRadius: "50%", background: T.surface, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>👤</div>
+                        <div style={{ width: 40, height: 40, borderRadius: "50%", background: T.surface, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}><Icon name="user" /></div>
                       )}
                       <div style={{
                         position: "absolute", bottom: 0, right: 0,
                         width: 11, height: 11, borderRadius: "50%",
-                        background: p.is_online ? "#22c55e" : "#444444",
+                        background: p.is_online ? "#4fb987" : "#3a414c",
                         border: `2px solid ${T.surface}`,
-                        boxShadow: p.is_online ? "0 0 6px #22c55e" : "none",
+                        boxShadow: p.is_online ? "0 0 6px #4fb987" : "none",
                       }} />
                     </div>
 
@@ -559,8 +560,8 @@ export default function Sidebar({
                           {p.display_name || p.username}
                         </span>
                         {p.auto_replica_enabled && (
-                          <span style={{ fontSize: 10, color: "#c084fc", flexShrink: 0 }} title="Digital Replica Ready">
-                            🪞
+                          <span style={{ fontSize: 10, color: "#b3a8f8", flexShrink: 0 }} title="Digital Replica Ready">
+                            <Icon name="twin" />
                           </span>
                         )}
                       </div>
@@ -570,11 +571,11 @@ export default function Sidebar({
                       </div>
 
                       {p.replica_status_note ? (
-                        <div style={{ fontSize: 10, color: "#c084fc", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          💬 {p.replica_status_note}
+                        <div style={{ fontSize: 10, color: "#b3a8f8", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {p.replica_status_note}
                         </div>
                       ) : (
-                        <div style={{ fontSize: 10, color: p.is_online ? "#22c55e" : T.muted2, marginTop: 1 }}>
+                        <div style={{ fontSize: 10, color: p.is_online ? "#4fb987" : T.muted2, marginTop: 1 }}>
                           {p.is_online ? "● Active Now" : p.last_seen
                             ? `Last seen ${new Date(p.last_seen).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
                             : "Offline"}
@@ -604,8 +605,8 @@ export default function Sidebar({
             borderRadius: 14,
             textAlign: "center",
           }}>
-            <div style={{ fontSize: 32, marginBottom: 6 }}>📡</div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: "#38bdf8", marginBottom: 4 }}>
+            <div style={{ fontSize: 32, marginBottom: 6 }}><Icon name="radar" /></div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#62b5d9", marginBottom: 4 }}>
               Kikar Radar Active
             </div>
             <div style={{ fontSize: 11, color: T.muted, lineHeight: 1.5 }}>
@@ -620,23 +621,23 @@ export default function Sidebar({
             padding: 14,
           }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: T.muted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>
-              ⚡ Radar Features
+              Radar Features
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 12, color: T.text }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span>🎲</span>
+                <span><Icon name="shuffle" /></span>
                 <span>AI Wingman Icebreaker Host</span>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span>➔</span>
+                <span><Icon name="radar" /></span>
                 <span>Instant &apos;Next Stranger&apos; Skip</span>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span>🤝</span>
+                <span><Icon name="userPlus" /></span>
                 <span>Add Friend to Save Chat</span>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span>🪞</span>
+                <span><Icon name="twin" /></span>
                 <span>Replica Sparring Fallback</span>
               </div>
             </div>

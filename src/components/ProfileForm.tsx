@@ -2,6 +2,7 @@
 import { useState } from "react"
 import { supabase } from "../lib/supabase"
 import { T } from "../styles"
+import { Icon } from "./Icons"
 
 interface Props {
   session: any
@@ -132,21 +133,21 @@ export default function ProfileForm({ session, profile, onSaved, onCancel }: Pro
                   height: 86,
                   borderRadius: "50%",
                   objectFit: "cover",
-                  border: `2px solid hsl(119,99%,46%)`,
-                  boxShadow: "0 0 24px hsla(119,99%,46%,0.3)",
+                  border: `2px solid hsl(226,72%,70%)`,
+                  boxShadow: "0 0 24px hsla(226,72%,70%,0.3)",
                 }}
               />
             : <div style={{
                 width: 86,
                 height: 86,
                 borderRadius: "50%",
-                background: "hsla(119,99%,46%,0.08)",
-                border: `2px dashed hsla(119,99%,46%,0.35)`,
+                background: "hsla(226,72%,70%,0.08)",
+                border: `2px dashed hsla(226,72%,70%,0.35)`,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 fontSize: 34,
-              }}>👤</div>
+              }}><Icon name="user" /></div>
           }
           <div style={{
             position: "absolute",
@@ -155,9 +156,9 @@ export default function ProfileForm({ session, profile, onSaved, onCancel }: Pro
             width: 14,
             height: 14,
             borderRadius: "50%",
-            background: "#22c55e",
+            background: "#4fb987",
             border: `2px solid ${T.surface}`,
-            boxShadow: "0 0 8px rgba(34,197,94,0.5)",
+            boxShadow: "0 0 8px rgba(79,185,135,0.5)",
           }} />
         </div>
 
@@ -263,13 +264,13 @@ export default function ProfileForm({ session, profile, onSaved, onCancel }: Pro
         marginTop: 22,
         padding: 18,
         background: T.surface,
-        border: "1px solid rgba(168,85,247,0.35)",
+        border: "1px solid rgba(139,124,246,0.35)",
         borderRadius: 14,
       }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "#c084fc" }}>
-              🪞 Offline Digital Replica Auto-Responder
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#b3a8f8" }}>
+              Offline Digital Replica Auto-Responder
             </div>
             <div style={{ fontSize: 11, color: T.muted, marginTop: 2 }}>
               Allow your AI Replica to respond to friends in DMs when you are offline (always labeled with an AI badge).
@@ -279,7 +280,7 @@ export default function ProfileForm({ session, profile, onSaved, onCancel }: Pro
             type="checkbox"
             checked={editProfile.auto_replica_enabled}
             onChange={e => setEditProfile({ ...editProfile, auto_replica_enabled: e.target.checked })}
-            style={{ width: 18, height: 18, accentColor: "#a855f7", cursor: "pointer" }}
+            style={{ width: 18, height: 18, accentColor: "#8b7cf6", cursor: "pointer" }}
           />
         </div>
 
@@ -324,7 +325,7 @@ export default function ProfileForm({ session, profile, onSaved, onCancel }: Pro
               fontFamily: T.font,
             }}
           >
-            {purging ? "⏳ Purging…" : "🗑️ Purge Replica & AI Logs"}
+            {purging ? "Purging…" : "Purge Replica & AI Logs"}
           </button>
         </div>
       </div>
@@ -355,7 +356,7 @@ export default function ProfileForm({ session, profile, onSaved, onCancel }: Pro
             padding: "13px 0",
             background: saving
               ? T.surface
-              : "linear-gradient(135deg, hsl(119,99%,46%) 0%, hsl(119,99%,38%) 100%)",
+              : "linear-gradient(135deg, hsl(226,72%,70%) 0%, hsl(226,62%,58%) 100%)",
             border: `1px solid ${saving ? T.border : "transparent"}`,
             borderRadius: 10,
             fontWeight: 700,
@@ -364,10 +365,10 @@ export default function ProfileForm({ session, profile, onSaved, onCancel }: Pro
             cursor: saving ? "not-allowed" : "pointer",
             color: saving ? T.muted : T.primaryFg,
             letterSpacing: "0.01em",
-            boxShadow: saving ? "none" : "0 4px 20px hsla(119,99%,46%,0.25)",
+            boxShadow: saving ? "none" : "0 4px 20px hsla(226,72%,70%,0.25)",
           }}
         >
-          {saving ? "⏳ Saving…" : "✓ Save Profile"}
+          {saving ? "Saving…" : "Save Profile"}
         </button>
       </div>
     </div>

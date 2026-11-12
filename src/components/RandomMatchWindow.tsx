@@ -1,8 +1,10 @@
 "use client"
 import { useState, useEffect, useRef } from "react"
+import { apiFetch } from "../lib/apiFetch"
 import { supabase } from "../lib/supabase"
 import { T } from "../styles"
 import type { Profile } from "../lib/types"
+import { Icon } from "./Icons"
 
 interface Props {
   session: any
@@ -24,11 +26,11 @@ interface RadarMessage {
 }
 
 const FALLBACK_ICEBREAKERS = [
-  "✦ Kikar Wingman: If you had to be trapped in an elevator for 6 hours with any fictional character, who are you picking?",
-  "✦ Kikar Wingman: What is one controversial food opinion that you will defend with your life?",
-  "✦ Kikar Wingman: Tell each other two truths and one lie. Let's see who guesses the lie first!",
-  "✦ Kikar Wingman: Would you rather fight 1 horse-sized duck or 100 duck-sized horses?",
-  "✦ Kikar Wingman: What's the best travel destination you've ever visited, or your #1 bucket list spot?",
+  "Kikar Wingman: If you had to be trapped in an elevator for 6 hours with any fictional character, who are you picking?",
+  "Kikar Wingman: What is one controversial food opinion that you will defend with your life?",
+  "Kikar Wingman: Tell each other two truths and one lie. Let's see who guesses the lie first!",
+  "Kikar Wingman: Would you rather fight 1 horse-sized duck or 100 duck-sized horses?",
+  "Kikar Wingman: What's the best travel destination you've ever visited, or your #1 bucket list spot?",
 ]
 
 export default function RandomMatchWindow({
@@ -174,7 +176,7 @@ export default function RandomMatchWindow({
         senderId: "system",
         senderName: "System",
         role: "ai",
-        content: `⚡ Connected with a live stranger (${partnerData.username || "Anonymous"})! Be friendly, or tap 🎲 AI Icebreaker to kick off the conversation.`,
+        content: `Connected with a live stranger (${partnerData.username || "Anonymous"})! Be friendly, or tap AI Icebreaker to kick off the conversation.`,
         created_at: new Date().toISOString(),
       },
     ])
@@ -210,7 +212,7 @@ export default function RandomMatchWindow({
           setMessages(prev => [...prev, {
             id: `ai-${Date.now()}`,
             senderId: "kikar-ai",
-            senderName: "✦ Kikar Wingman",
+            senderName: "Kikar Wingman",
             role: "ai",
             content: payload.content,
             created_at: new Date().toISOString(),
@@ -225,7 +227,7 @@ export default function RandomMatchWindow({
             senderId: "system",
             senderName: "System",
             role: "ai",
-            content: "👋 Stranger skipped to the next person. Tap 'Find Next Stranger' below!",
+            content: "Stranger skipped to the next person. Tap 'Find Next Stranger' below!",
             created_at: new Date().toISOString(),
           },
         ])
@@ -271,7 +273,7 @@ export default function RandomMatchWindow({
     })
   }
 
-  // ── Actions: 🎲 AI Icebreaker ─────────────────────────────────
+  // ── Actions: AI Icebreaker ─────────────────────────────────
   async function triggerAiIcebreaker(customRoom?: any, silent = false) {
     const activeRoom = customRoom || roomChannelRef.current
     if (!activeRoom || requestingAi) return
@@ -285,7 +287,7 @@ export default function RandomMatchWindow({
         debate: "playful and funny controversial debate question",
       }
 
-      const res = await fetch("/api/chat", {
+      const res = await apiFetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -309,7 +311,7 @@ export default function RandomMatchWindow({
         {
           id: `ai-${Date.now()}`,
           senderId: "kikar-ai",
-          senderName: "✦ Kikar Wingman",
+          senderName: "Kikar Wingman",
           role: "ai",
           content: icebreakerText,
           created_at: new Date().toISOString(),
@@ -322,7 +324,7 @@ export default function RandomMatchWindow({
         {
           id: `ai-${Date.now()}`,
           senderId: "kikar-ai",
-          senderName: "✦ Kikar Wingman",
+          senderName: "Kikar Wingman",
           role: "ai",
           content: fallback,
           created_at: new Date().toISOString(),
@@ -445,15 +447,15 @@ export default function RandomMatchWindow({
 
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ fontSize: 16 }}>⚡</span>
+              <span style={{ fontSize: 16 }}><Icon name="radar" /></span>
               <span style={{ fontSize: 15, fontWeight: 700, color: T.text, letterSpacing: "-0.02em" }}>
                 Kikar Radar
               </span>
               <span style={{
                 fontSize: 11,
-                background: matchState === "matched" ? "rgba(34,197,94,0.15)" : "rgba(56,189,248,0.15)",
-                color: matchState === "matched" ? "#22c55e" : "#38bdf8",
-                border: matchState === "matched" ? "1px solid rgba(34,197,94,0.3)" : "1px solid rgba(56,189,248,0.3)",
+                background: matchState === "matched" ? "rgba(79,185,135,0.15)" : "rgba(56,189,248,0.15)",
+                color: matchState === "matched" ? "#4fb987" : "#62b5d9",
+                border: matchState === "matched" ? "1px solid rgba(79,185,135,0.3)" : "1px solid rgba(56,189,248,0.3)",
                 padding: "1px 7px",
                 borderRadius: 999,
                 fontWeight: 700,
@@ -479,10 +481,10 @@ export default function RandomMatchWindow({
               title="Add this stranger as a permanent friend in your Fellows list"
               style={{
                 padding: "7px 12px",
-                background: friendAdded ? "rgba(34,197,94,0.15)" : "hsla(119,99%,46%,0.15)",
-                border: friendAdded ? "1px solid #22c55e" : `1px solid ${T.primary}`,
+                background: friendAdded ? "rgba(79,185,135,0.15)" : "hsla(226,72%,70%,0.15)",
+                border: friendAdded ? "1px solid #4fb987" : `1px solid ${T.primary}`,
                 borderRadius: 8,
-                color: friendAdded ? "#22c55e" : T.primary,
+                color: friendAdded ? "#4fb987" : T.primary,
                 fontSize: 11,
                 fontWeight: 700,
                 cursor: friendAdded ? "default" : "pointer",
@@ -491,7 +493,7 @@ export default function RandomMatchWindow({
                 gap: 5,
               }}
             >
-              <span>{friendAdded ? "✓ Added to Friends" : "🤝 Add Friend"}</span>
+              <span>{friendAdded ? "Added to Friends" : "Add Friend"}</span>
             </button>
 
             <button
@@ -500,7 +502,7 @@ export default function RandomMatchWindow({
               title="Skip to next stranger"
               style={{
                 padding: "7px 12px",
-                background: "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)",
+                background: "linear-gradient(135deg, #e0a84f 0%, #d97706 100%)",
                 border: "none",
                 borderRadius: 8,
                 color: "#000",
@@ -512,7 +514,7 @@ export default function RandomMatchWindow({
                 gap: 4,
               }}
             >
-              <span>Next ➔</span>
+              <span>Next →</span>
             </button>
 
             <button
@@ -530,7 +532,7 @@ export default function RandomMatchWindow({
                 fontSize: 14,
               }}
             >
-              ✕
+              
             </button>
           </div>
         ) : null}
@@ -577,15 +579,15 @@ export default function RandomMatchWindow({
               borderRadius: "50%",
               background: matchState === "searching"
                 ? "radial-gradient(circle, rgba(56,189,248,0.3) 0%, rgba(56,189,248,0.05) 70%)"
-                : "radial-gradient(circle, rgba(168,85,247,0.25) 0%, rgba(168,85,247,0.05) 70%)",
-              border: matchState === "searching" ? "2px solid #38bdf8" : "2px solid #a855f7",
+                : "radial-gradient(circle, rgba(139,124,246,0.25) 0%, rgba(139,124,246,0.05) 70%)",
+              border: matchState === "searching" ? "2px solid #62b5d9" : "2px solid #8b7cf6",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               fontSize: 38,
-              boxShadow: matchState === "searching" ? "0 0 35px rgba(56,189,248,0.35)" : "0 0 30px rgba(168,85,247,0.25)",
+              boxShadow: matchState === "searching" ? "0 0 35px rgba(56,189,248,0.35)" : "0 0 30px rgba(139,124,246,0.25)",
             }}>
-              {matchState === "searching" ? "📡" : "⚡"}
+              {matchState === "searching" ? <Icon name="radar" /> : <Icon name="radar" />}
             </div>
           </div>
 
@@ -607,10 +609,10 @@ export default function RandomMatchWindow({
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center" }}>
                 {([
-                  { id: "casual", label: "🌟 Casual & Fun" },
-                  { id: "gaming", label: "🎮 Gaming & Tech" },
-                  { id: "deep",   label: "🎭 Deep Thoughts" },
-                  { id: "debate", label: "🌶️ Playful Debates" },
+                  { id: "casual", label: "Casual & Fun" },
+                  { id: "gaming", label: "Gaming & Tech" },
+                  { id: "deep",   label: "Deep Thoughts" },
+                  { id: "debate", label: "Playful Debates" },
                 ] as const).map(v => (
                   <button
                     key={v.id}
@@ -620,8 +622,8 @@ export default function RandomMatchWindow({
                       padding: "8px 14px",
                       borderRadius: 10,
                       background: topicVibe === v.id ? "rgba(56,189,248,0.18)" : T.surface,
-                      border: topicVibe === v.id ? "1px solid #38bdf8" : `1px solid ${T.border}`,
-                      color: topicVibe === v.id ? "#38bdf8" : T.muted,
+                      border: topicVibe === v.id ? "1px solid #62b5d9" : `1px solid ${T.border}`,
+                      color: topicVibe === v.id ? "#62b5d9" : T.muted,
                       fontSize: 12,
                       fontWeight: 600,
                       cursor: "pointer",
@@ -642,7 +644,7 @@ export default function RandomMatchWindow({
               onClick={handleStartSearch}
               style={{
                 padding: "14px 38px",
-                background: "linear-gradient(135deg, #38bdf8 0%, #0284c7 100%)",
+                background: "linear-gradient(135deg, #62b5d9 0%, #2b7ea3 100%)",
                 border: "none",
                 borderRadius: 12,
                 color: "#000",
@@ -653,7 +655,7 @@ export default function RandomMatchWindow({
                 boxShadow: "0 4px 25px rgba(56,189,248,0.35)",
               }}
             >
-              ⚡ Start Matching
+              Start Matching
             </button>
           ) : (
             <button
@@ -680,14 +682,14 @@ export default function RandomMatchWindow({
             <div style={{
               marginTop: 28,
               padding: "16px 20px",
-              background: "rgba(168,85,247,0.1)",
-              border: "1px solid rgba(168,85,247,0.3)",
+              background: "rgba(139,124,246,0.1)",
+              border: "1px solid rgba(139,124,246,0.3)",
               borderRadius: 14,
               maxWidth: 380,
               textAlign: "center",
             }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "#c084fc", marginBottom: 4 }}>
-                🪞 No live human in queue right now?
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#b3a8f8", marginBottom: 4 }}>
+                No live human in queue right now?
               </div>
               <div style={{ fontSize: 11, color: T.muted, marginBottom: 12, lineHeight: 1.5 }}>
                 You don&apos;t have to wait! Match instantly with an active Digital Twin or AI Persona companion.
@@ -697,7 +699,7 @@ export default function RandomMatchWindow({
                 onClick={handleSparWithReplica}
                 style={{
                   padding: "8px 18px",
-                  background: "linear-gradient(135deg, #a855f7 0%, #7e22ce 100%)",
+                  background: "linear-gradient(135deg, #8b7cf6 0%, #5b4bc4 100%)",
                   border: "none",
                   borderRadius: 8,
                   color: "#fff",
@@ -706,7 +708,7 @@ export default function RandomMatchWindow({
                   cursor: "pointer",
                 }}
               >
-                ✦ Chat with Digital Replica
+                Chat with Digital Replica
               </button>
             </div>
           )}
@@ -742,7 +744,7 @@ export default function RandomMatchWindow({
                       boxShadow: "0 2px 12px rgba(56,189,248,0.08)",
                     }}
                   >
-                    <div style={{ fontSize: 10, fontWeight: 700, color: "#38bdf8", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#62b5d9", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>
                       {m.senderName}
                     </div>
                     {m.content}
@@ -771,7 +773,7 @@ export default function RandomMatchWindow({
                       padding: "10px 14px",
                       borderRadius: isMe ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
                       background: isMe
-                        ? "linear-gradient(135deg, hsl(119,99%,46%), hsl(119,99%,38%))"
+                        ? "linear-gradient(135deg, hsl(226,72%,70%), hsl(226,62%,58%))"
                         : T.surface,
                       color: isMe ? T.primaryFg : T.text,
                       border: isMe ? "none" : `1px solid ${T.border}`,
@@ -789,7 +791,7 @@ export default function RandomMatchWindow({
             {partnerTyping && (
               <div style={{
                 fontSize: 11,
-                color: "#38bdf8",
+                color: "#62b5d9",
                 padding: "6px 12px",
                 background: "rgba(56,189,248,0.1)",
                 border: "1px solid rgba(56,189,248,0.25)",
@@ -813,7 +815,7 @@ export default function RandomMatchWindow({
             flexShrink: 0,
             alignItems: "center",
           }}>
-            {/* Quick 🎲 AI Icebreaker chip */}
+            {/* Quick AI Icebreaker chip */}
             <button
               type="button"
               onClick={() => triggerAiIcebreaker()}
@@ -825,7 +827,7 @@ export default function RandomMatchWindow({
                 borderRadius: 999,
                 background: "rgba(56,189,248,0.15)",
                 border: "1px solid rgba(56,189,248,0.35)",
-                color: "#38bdf8",
+                color: "#62b5d9",
                 fontSize: 11,
                 fontWeight: 700,
                 cursor: requestingAi ? "wait" : "pointer",
@@ -836,7 +838,7 @@ export default function RandomMatchWindow({
                 gap: 4,
               }}
             >
-              <span>{requestingAi ? "⏳" : "🎲"}</span>
+              <span>{requestingAi ? <Icon name="clock" /> : <Icon name="shuffle" />}</span>
               <span>Icebreaker</span>
             </button>
 
@@ -851,7 +853,7 @@ export default function RandomMatchWindow({
                 })
               }}
               onKeyDown={e => e.key === "Enter" && sendMessage()}
-              placeholder="Type to stranger (or tap 🎲 Icebreaker)…"
+              placeholder="Type to stranger (or tap Icebreaker)…"
               style={{
                 flex: 1,
                 minWidth: 0,
@@ -876,7 +878,7 @@ export default function RandomMatchWindow({
                 borderRadius: "50%",
                 background: !input.trim()
                   ? T.surface
-                  : "linear-gradient(135deg, #38bdf8, #0284c7)",
+                  : "linear-gradient(135deg, #62b5d9, #2b7ea3)",
                 border: `1px solid ${!input.trim() ? T.border : "transparent"}`,
                 fontSize: 16,
                 cursor: !input.trim() ? "not-allowed" : "pointer",

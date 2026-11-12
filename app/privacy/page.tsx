@@ -6,7 +6,7 @@ export const metadata = {
 
 export default function PrivacyPolicyPage() {
   return (
-    <div className="min-h-screen bg-[hsl(0,0%,8%)] text-white font-sora">
+    <div className="min-h-screen bg-[#0f1115] text-white font-sora">
       <div className="max-w-2xl mx-auto px-6 md:px-12 py-16">
         {/* Back link */}
         <Link
@@ -17,7 +17,7 @@ export default function PrivacyPolicyPage() {
         </Link>
 
         <h1 className="text-3xl md:text-4xl font-bold tracking-tight mb-2">
-          Kikar <span className="text-[hsl(119,99%,46%)]">Privacy Policy</span>
+          Kikar <span className="text-[hsl(226,72%,70%)]">Privacy Policy</span>
         </h1>
         <p className="text-white/50 text-sm mb-10">
           kikkar.vercel.app · Last updated: August 10, 2026
@@ -154,7 +154,7 @@ export default function PrivacyPolicyPage() {
 
           <Section title="9. Contact Us">
             <p>If you have questions about this Privacy Policy or want to exercise your data rights, contact us at:</p>
-            <p className="text-[hsl(119,99%,46%)] font-semibold">bhavya497sharma@gmail.com</p>
+            <p className="text-[hsl(226,72%,70%)] font-semibold">bhavya497sharma@gmail.com</p>
           </Section>
         </div>
       </div>
@@ -165,7 +165,7 @@ export default function PrivacyPolicyPage() {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section>
-      <h2 className="text-lg font-bold text-[hsl(119,99%,46%)] mb-3">{title}</h2>
+      <h2 className="text-lg font-bold text-[hsl(226,72%,70%)] mb-3">{title}</h2>
       <div className="space-y-3">{children}</div>
     </section>
   )

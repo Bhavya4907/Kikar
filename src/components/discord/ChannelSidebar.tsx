@@ -2,6 +2,7 @@
 import { useState } from "react"
 import { T } from "../../styles"
 import type { DiscordServer, DiscordChannel } from "../../lib/discordTypes"
+import { Icon } from "../Icons"
 
 interface Props {
   activeServer: DiscordServer | null
@@ -22,6 +23,12 @@ interface Props {
   onOpenCreatePersona?: () => void
   voiceConnected?: boolean
   onToggleVoice?: () => void
+  micMuted?: boolean
+  deafened?: boolean
+  onToggleMic?: () => void
+  onToggleDeafen?: () => void
+  voiceChannelName?: string
+  voicePeersCount?: number
 }
 
 export default function ChannelSidebar({
@@ -43,9 +50,17 @@ export default function ChannelSidebar({
   onOpenCreatePersona,
   voiceConnected = false,
   onToggleVoice,
+  micMuted: propMicMuted,
+  deafened: propDeafened,
+  onToggleMic,
+  onToggleDeafen,
+  voiceChannelName,
+  voicePeersCount = 0,
 }: Props) {
-  const [micMuted, setMicMuted] = useState(false)
-  const [headphonesMuted, setHeadphonesMuted] = useState(false)
+  const [localMicMuted, setLocalMicMuted] = useState(false)
+  const [localHeadphonesMuted, setLocalHeadphonesMuted] = useState(false)
+  const micMuted = propMicMuted !== undefined ? propMicMuted : localMicMuted
+  const headphonesMuted = propDeafened !== undefined ? propDeafened : localHeadphonesMuted
   const [serverDropdownOpen, setServerDropdownOpen] = useState(false)
   const [searchFilter, setSearchFilter] = useState("")
 
@@ -60,7 +75,7 @@ export default function ChannelSidebar({
         width: 240,
         flexShrink: 0,
         height: "100%",
-        background: "#18191c",
+        background: "#12151a",
         borderRight: "1px solid rgba(255, 255, 255, 0.06)",
         display: "flex",
         flexDirection: "column",
@@ -84,7 +99,7 @@ export default function ChannelSidebar({
               background: "transparent",
               border: "none",
               borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
-              color: "#f2f3f5",
+              color: "#eceef2",
               fontWeight: 700,
               fontSize: 15,
               display: "flex",
@@ -97,8 +112,8 @@ export default function ChannelSidebar({
             <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {activeServer.name}
             </span>
-            <span style={{ fontSize: 13, color: "#949ba4", transform: serverDropdownOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>
-              ⌄
+            <span style={{ fontSize: 13, color: "#9aa1ad", transform: serverDropdownOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>
+              
             </span>
           </button>
 
@@ -110,7 +125,7 @@ export default function ChannelSidebar({
                 top: 50,
                 left: 8,
                 right: 8,
-                background: "#111214",
+                background: "#0b0d11",
                 border: "1px solid rgba(255, 255, 255, 0.1)",
                 borderRadius: 8,
                 padding: 6,
@@ -133,7 +148,7 @@ export default function ChannelSidebar({
                     borderRadius: 4,
                     background: "transparent",
                     border: "none",
-                    color: "#949ba4",
+                    color: "#9aa1ad",
                     fontSize: 13,
                     textAlign: "left",
                     cursor: "pointer",
@@ -142,16 +157,16 @@ export default function ChannelSidebar({
                     justifyContent: "space-between",
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.background = "hsl(119, 99%, 46%)"
+                    e.currentTarget.style.background = "hsl(226, 72%, 70%)"
                     e.currentTarget.style.color = "#000"
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.background = "transparent"
-                    e.currentTarget.style.color = "#949ba4"
+                    e.currentTarget.style.color = "#9aa1ad"
                   }}
                 >
                   <span>Create Channel</span>
-                  <span>➕</span>
+                  <span><Icon name="plus" /></span>
                 </button>
               )}
               <button
@@ -165,7 +180,7 @@ export default function ChannelSidebar({
                   borderRadius: 4,
                   background: "transparent",
                   border: "none",
-                  color: "#c084fc",
+                  color: "#b3a8f8",
                   fontSize: 13,
                   textAlign: "left",
                   cursor: "pointer",
@@ -175,7 +190,7 @@ export default function ChannelSidebar({
                 }}
               >
                 <span>Server Boost / Plus</span>
-                <span>⚡</span>
+                <span><Icon name="radar" /></span>
               </button>
             </div>
           )}
@@ -196,7 +211,7 @@ export default function ChannelSidebar({
             style={{
               width: "100%",
               height: 30,
-              background: "#111214",
+              background: "#0b0d11",
               borderRadius: 6,
               display: "flex",
               alignItems: "center",
@@ -204,7 +219,7 @@ export default function ChannelSidebar({
               gap: 6,
             }}
           >
-            <span style={{ fontSize: 12, color: "#949ba4" }}>🔍</span>
+            <span style={{ fontSize: 12, color: "#9aa1ad" }}><Icon name="search" /></span>
             <input
               value={searchFilter}
               onChange={(e) => setSearchFilter(e.target.value)}
@@ -214,7 +229,7 @@ export default function ChannelSidebar({
                 background: "transparent",
                 border: "none",
                 outline: "none",
-                color: "#dbdee1",
+                color: "#d5d9e0",
                 fontSize: 12,
                 fontFamily: T.font,
               }}
@@ -223,9 +238,9 @@ export default function ChannelSidebar({
               <button
                 type="button"
                 onClick={() => setSearchFilter("")}
-                style={{ background: "transparent", border: "none", color: "#949ba4", cursor: "pointer", fontSize: 11 }}
+                style={{ background: "transparent", border: "none", color: "#9aa1ad", cursor: "pointer", fontSize: 11 }}
               >
-                ✕
+                
               </button>
             )}
           </div>
@@ -254,7 +269,7 @@ export default function ChannelSidebar({
                 alignItems: "center",
                 justifyContent: "space-between",
                 padding: "8px 6px 4px",
-                color: "#949ba4",
+                color: "#9aa1ad",
                 fontSize: 11,
                 fontWeight: 700,
                 letterSpacing: "0.06em",
@@ -267,7 +282,7 @@ export default function ChannelSidebar({
                   type="button"
                   onClick={() => onCreateChannel(activeServer.id)}
                   title="Create Channel"
-                  style={{ background: "transparent", border: "none", color: "#949ba4", cursor: "pointer", fontSize: 13 }}
+                  style={{ background: "transparent", border: "none", color: "#9aa1ad", cursor: "pointer", fontSize: 13 }}
                 >
                   +
                 </button>
@@ -289,7 +304,7 @@ export default function ChannelSidebar({
                       borderRadius: 6,
                       border: "none",
                       background: isActive ? "rgba(255, 255, 255, 0.12)" : "transparent",
-                      color: isActive ? "#ffffff" : "#949ba4",
+                      color: isActive ? "#f4f5f7" : "#9aa1ad",
                       display: "flex",
                       alignItems: "center",
                       gap: 8,
@@ -297,22 +312,22 @@ export default function ChannelSidebar({
                       fontWeight: isActive ? 600 : 500,
                       cursor: "pointer",
                       textAlign: "left",
-                      transition: "all 0.15s ease",
+                      transition: "background-color 0.15s, border-color 0.15s, color 0.15s, opacity 0.15s, box-shadow 0.15s, transform 0.15s ease",
                     }}
                     onMouseEnter={(e) => {
                       if (!isActive) {
                         e.currentTarget.style.background = "rgba(255, 255, 255, 0.05)"
-                        e.currentTarget.style.color = "#dbdee1"
+                        e.currentTarget.style.color = "#d5d9e0"
                       }
                     }}
                     onMouseLeave={(e) => {
                       if (!isActive) {
                         e.currentTarget.style.background = "transparent"
-                        e.currentTarget.style.color = "#949ba4"
+                        e.currentTarget.style.color = "#9aa1ad"
                       }
                     }}
                   >
-                    <span style={{ fontSize: 16, color: isActive ? "#ffffff" : "#80848e" }}>#</span>
+                    <span style={{ fontSize: 16, color: isActive ? "#f4f5f7" : "#7a8290" }}>#</span>
                     <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {channel.name}
                     </span>
@@ -329,14 +344,14 @@ export default function ChannelSidebar({
                     alignItems: "center",
                     justifyContent: "space-between",
                     padding: "16px 6px 4px",
-                    color: "#949ba4",
+                    color: "#9aa1ad",
                     fontSize: 11,
                     fontWeight: 700,
                     letterSpacing: "0.06em",
                     textTransform: "uppercase",
                   }}
                 >
-                  <span>🔊 Voice Lounges</span>
+                  <span>Voice Lounges</span>
                 </div>
 
                 {activeServer.channels
@@ -359,9 +374,9 @@ export default function ChannelSidebar({
                           borderRadius: 6,
                           border: "none",
                           background: isActive
-                            ? "rgba(34, 197, 94, 0.15)"
+                            ? "rgba(79,185,135, 0.15)"
                             : "transparent",
-                          color: isActive ? "#22c55e" : "#949ba4",
+                          color: isActive ? "#4fb987" : "#9aa1ad",
                           display: "flex",
                           alignItems: "center",
                           gap: 8,
@@ -369,27 +384,27 @@ export default function ChannelSidebar({
                           fontWeight: isActive ? 600 : 500,
                           cursor: "pointer",
                           textAlign: "left",
-                          transition: "all 0.15s ease",
+                          transition: "background-color 0.15s, border-color 0.15s, color 0.15s, opacity 0.15s, box-shadow 0.15s, transform 0.15s ease",
                         }}
                         onMouseEnter={(e) => {
                           if (!isActive) {
                             e.currentTarget.style.background = "rgba(255, 255, 255, 0.05)"
-                            e.currentTarget.style.color = "#dbdee1"
+                            e.currentTarget.style.color = "#d5d9e0"
                           }
                         }}
                         onMouseLeave={(e) => {
                           if (!isActive) {
                             e.currentTarget.style.background = "transparent"
-                            e.currentTarget.style.color = "#949ba4"
+                            e.currentTarget.style.color = "#9aa1ad"
                           }
                         }}
                       >
-                        <span style={{ fontSize: 15 }}>🔊</span>
+                        <span style={{ fontSize: 15 }}><Icon name="volume" /></span>
                         <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                           {channel.name}
                         </span>
                         {voiceConnected && isActive && (
-                          <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 6px #22c55e" }} />
+                          <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#4fb987", boxShadow: "0 0 6px #4fb987" }} />
                         )}
                       </button>
                     )
@@ -404,20 +419,20 @@ export default function ChannelSidebar({
                 alignItems: "center",
                 justifyContent: "space-between",
                 padding: "16px 6px 4px",
-                color: "#949ba4",
+                color: "#9aa1ad",
                 fontSize: 11,
                 fontWeight: 700,
                 letterSpacing: "0.06em",
                 textTransform: "uppercase",
               }}
             >
-              <span>🤖 AI Bot Arenas</span>
+              <span>AI Bot Arenas</span>
               {onOpenCreatePersona && (
                 <button
                   type="button"
                   onClick={onOpenCreatePersona}
                   title="Create New AI Persona"
-                  style={{ background: "transparent", border: "none", color: "#949ba4", cursor: "pointer", fontSize: 13 }}
+                  style={{ background: "transparent", border: "none", color: "#9aa1ad", cursor: "pointer", fontSize: 13 }}
                 >
                   +
                 </button>
@@ -438,8 +453,8 @@ export default function ChannelSidebar({
                       padding: "6px 8px",
                       borderRadius: 6,
                       border: "none",
-                      background: isActive ? "rgba(168, 85, 247, 0.18)" : "transparent",
-                      color: isActive ? "#c084fc" : "#949ba4",
+                      background: isActive ? "rgba(139,124,246, 0.18)" : "transparent",
+                      color: isActive ? "#b3a8f8" : "#9aa1ad",
                       display: "flex",
                       alignItems: "center",
                       gap: 8,
@@ -447,10 +462,10 @@ export default function ChannelSidebar({
                       fontWeight: isActive ? 600 : 500,
                       cursor: "pointer",
                       textAlign: "left",
-                      transition: "all 0.15s ease",
+                      transition: "background-color 0.15s, border-color 0.15s, color 0.15s, opacity 0.15s, box-shadow 0.15s, transform 0.15s ease",
                     }}
                   >
-                    <span style={{ fontSize: 15 }}>{channel.type === "radar" ? "⚡" : "🤖"}</span>
+                    <span style={{ fontSize: 15 }}>{channel.type === "radar" ? <Icon name="radar" /> : <Icon name="bot" />}</span>
                     <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {channel.name}
                     </span>
@@ -472,7 +487,7 @@ export default function ChannelSidebar({
                   borderRadius: 6,
                   border: "none",
                   background: homeSubView === "fellows" && !activeConvo ? "rgba(255, 255, 255, 0.12)" : "transparent",
-                  color: homeSubView === "fellows" && !activeConvo ? "#ffffff" : "#949ba4",
+                  color: homeSubView === "fellows" && !activeConvo ? "#f4f5f7" : "#9aa1ad",
                   display: "flex",
                   alignItems: "center",
                   gap: 12,
@@ -482,12 +497,12 @@ export default function ChannelSidebar({
                   textAlign: "left",
                 }}
               >
-                <span style={{ fontSize: 16 }}>👥</span>
+                <span style={{ fontSize: 16 }}><Icon name="users" /></span>
                 <span style={{ flex: 1 }}>Fellows Directory</span>
                 {onlineFellowsCount > 0 && (
                   <span
                     style={{
-                      background: "#22c55e",
+                      background: "#4fb987",
                       color: "#000",
                       fontSize: 10,
                       fontWeight: 800,
@@ -509,7 +524,7 @@ export default function ChannelSidebar({
                   borderRadius: 6,
                   border: "none",
                   background: homeSubView === "radar" && !activeConvo ? "rgba(56, 189, 248, 0.18)" : "transparent",
-                  color: homeSubView === "radar" && !activeConvo ? "#38bdf8" : "#949ba4",
+                  color: homeSubView === "radar" && !activeConvo ? "#62b5d9" : "#9aa1ad",
                   display: "flex",
                   alignItems: "center",
                   gap: 12,
@@ -519,7 +534,7 @@ export default function ChannelSidebar({
                   textAlign: "left",
                 }}
               >
-                <span style={{ fontSize: 16 }}>⚡</span>
+                <span style={{ fontSize: 16 }}><Icon name="radar" /></span>
                 <span style={{ flex: 1 }}>Radar Matchmaker</span>
               </button>
 
@@ -532,8 +547,8 @@ export default function ChannelSidebar({
                     padding: "8px 10px",
                     borderRadius: 6,
                     border: "none",
-                    background: homeSubView === "personas" && !activeConvo ? "hsla(119, 99%, 46%, 0.15)" : "transparent",
-                    color: homeSubView === "personas" && !activeConvo ? T.primary : "#949ba4",
+                    background: homeSubView === "personas" && !activeConvo ? "hsla(226, 72%, 70%, 0.15)" : "transparent",
+                    color: homeSubView === "personas" && !activeConvo ? T.primary : "#9aa1ad",
                     display: "flex",
                     alignItems: "center",
                     gap: 12,
@@ -543,7 +558,7 @@ export default function ChannelSidebar({
                     textAlign: "left",
                   }}
                 >
-                  <span style={{ fontSize: 16 }}>🤖</span>
+                  <span style={{ fontSize: 16 }}><Icon name="bot" /></span>
                   <span style={{ flex: 1 }}>AI Persona Gallery</span>
                 </button>
                 {onOpenCreatePersona && (
@@ -560,7 +575,7 @@ export default function ChannelSidebar({
                       borderRadius: 6,
                       background: "rgba(255, 255, 255, 0.06)",
                       border: "none",
-                      color: "#949ba4",
+                      color: "#9aa1ad",
                       fontSize: 14,
                       cursor: "pointer",
                       display: "flex",
@@ -581,7 +596,7 @@ export default function ChannelSidebar({
                 alignItems: "center",
                 justifyContent: "space-between",
                 padding: "8px 6px 4px",
-                color: "#949ba4",
+                color: "#9aa1ad",
                 fontSize: 11,
                 fontWeight: 700,
                 letterSpacing: "0.06em",
@@ -594,7 +609,7 @@ export default function ChannelSidebar({
                   type="button"
                   onClick={onOpenCreateDM}
                   title="Create DM"
-                  style={{ background: "transparent", border: "none", color: "#949ba4", cursor: "pointer", fontSize: 13 }}
+                  style={{ background: "transparent", border: "none", color: "#9aa1ad", cursor: "pointer", fontSize: 13 }}
                 >
                   +
                 </button>
@@ -603,7 +618,7 @@ export default function ChannelSidebar({
 
             {/* Direct Messages List */}
             {conversations.length === 0 ? (
-              <div style={{ padding: "16px 8px", fontSize: 12, color: "#666", textAlign: "center" }}>
+              <div style={{ padding: "16px 8px", fontSize: 12, color: "#6a7280", textAlign: "center" }}>
                 No active DMs yet.<br />Meet people via Fellows or Radar!
               </div>
             ) : (
@@ -630,25 +645,25 @@ export default function ChannelSidebar({
                         borderRadius: 6,
                         border: "none",
                         background: isActive ? "rgba(255, 255, 255, 0.12)" : "transparent",
-                        color: isActive ? "#ffffff" : "#949ba4",
+                        color: isActive ? "#f4f5f7" : "#9aa1ad",
                         display: "flex",
                         alignItems: "center",
                         gap: 10,
                         fontSize: 14,
                         cursor: "pointer",
                         textAlign: "left",
-                        transition: "all 0.15s ease",
+                        transition: "background-color 0.15s, border-color 0.15s, color 0.15s, opacity 0.15s, box-shadow 0.15s, transform 0.15s ease",
                       }}
                       onMouseEnter={(e) => {
                         if (!isActive) {
                           e.currentTarget.style.background = "rgba(255, 255, 255, 0.05)"
-                          e.currentTarget.style.color = "#dbdee1"
+                          e.currentTarget.style.color = "#d5d9e0"
                         }
                       }}
                       onMouseLeave={(e) => {
                         if (!isActive) {
                           e.currentTarget.style.background = "transparent"
-                          e.currentTarget.style.color = "#949ba4"
+                          e.currentTarget.style.color = "#9aa1ad"
                         }
                       }}
                     >
@@ -666,14 +681,14 @@ export default function ChannelSidebar({
                               width: 32,
                               height: 32,
                               borderRadius: "50%",
-                              background: "#2b2d31",
+                              background: "#161a20",
                               display: "flex",
                               alignItems: "center",
                               justifyContent: "center",
                               fontSize: 14,
                             }}
                           >
-                            👤
+                            <Icon name="user" />
                           </div>
                         )}
                         <span
@@ -684,8 +699,8 @@ export default function ChannelSidebar({
                             width: 9,
                             height: 9,
                             borderRadius: "50%",
-                            background: otherProfile?.is_online ? "#22c55e" : "#80848e",
-                            border: "2px solid #18191c",
+                            background: otherProfile?.is_online ? "#4fb987" : "#7a8290",
+                            border: "2px solid #12151a",
                           }}
                         />
                       </div>
@@ -697,7 +712,7 @@ export default function ChannelSidebar({
                             textOverflow: "ellipsis",
                             whiteSpace: "nowrap",
                             fontWeight: isActive ? 600 : 500,
-                            color: isActive ? "#ffffff" : "#dbdee1",
+                            color: isActive ? "#f4f5f7" : "#d5d9e0",
                           }}
                         >
                           {other?.display_name || other?.username || "Fellow"}
@@ -706,7 +721,7 @@ export default function ChannelSidebar({
                           <div
                             style={{
                               fontSize: 10,
-                              color: "#80848e",
+                              color: "#7a8290",
                               overflow: "hidden",
                               textOverflow: "ellipsis",
                               whiteSpace: "nowrap",
@@ -729,8 +744,8 @@ export default function ChannelSidebar({
         <div
           style={{
             padding: "8px 12px",
-            background: "rgba(34, 197, 94, 0.12)",
-            borderTop: "1px solid rgba(34, 197, 94, 0.25)",
+            background: "rgba(79,185,135, 0.12)",
+            borderTop: "1px solid rgba(79,185,135, 0.25)",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
@@ -738,13 +753,13 @@ export default function ChannelSidebar({
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-            <span style={{ fontSize: 16 }}>📶</span>
+            <span style={{ fontSize: 16 }}><Icon name="signal" /></span>
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: "#22c55e", lineHeight: 1.2 }}>
-                Voice Connected
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#4fb987", lineHeight: 1.2 }}>
+                Voice Connected {voiceChannelName ? `· #${voiceChannelName}` : ""}
               </div>
-              <div style={{ fontSize: 10, color: "#949ba4", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                RTC / 24ms
+              <div style={{ fontSize: 10, color: "#9aa1ad", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                WebRTC P2P Mesh · {voicePeersCount || 1} in room
               </div>
             </div>
           </div>
@@ -760,7 +775,7 @@ export default function ChannelSidebar({
                 borderRadius: "50%",
                 background: "rgba(248, 113, 113, 0.15)",
                 border: "1px solid rgba(248, 113, 113, 0.3)",
-                color: "#f87171",
+                color: "#ef8a8a",
                 fontSize: 12,
                 cursor: "pointer",
                 display: "flex",
@@ -768,7 +783,7 @@ export default function ChannelSidebar({
                 justifyContent: "center",
               }}
             >
-              📞
+              <Icon name="phone" />
             </button>
           )}
         </div>
@@ -779,7 +794,7 @@ export default function ChannelSidebar({
         style={{
           height: 52,
           padding: "0 8px",
-          background: "#111214",
+          background: "#0b0d11",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
@@ -818,14 +833,14 @@ export default function ChannelSidebar({
                   width: 32,
                   height: 32,
                   borderRadius: "50%",
-                  background: "#2b2d31",
+                  background: "#161a20",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
                   fontSize: 14,
                 }}
               >
-                👤
+                <Icon name="user" />
               </div>
             )}
             <span
@@ -836,8 +851,8 @@ export default function ChannelSidebar({
                 width: 9,
                 height: 9,
                 borderRadius: "50%",
-                background: "#22c55e",
-                border: "2px solid #111214",
+                background: "#4fb987",
+                border: "2px solid #0b0d11",
               }}
             />
           </div>
@@ -847,7 +862,7 @@ export default function ChannelSidebar({
               style={{
                 fontSize: 13,
                 fontWeight: 700,
-                color: "#f2f3f5",
+                color: "#eceef2",
                 overflow: "hidden",
                 textOverflow: "ellipsis",
                 whiteSpace: "nowrap",
@@ -858,7 +873,7 @@ export default function ChannelSidebar({
             <div
               style={{
                 fontSize: 11,
-                color: "#949ba4",
+                color: "#9aa1ad",
                 overflow: "hidden",
                 textOverflow: "ellipsis",
                 whiteSpace: "nowrap",
@@ -873,7 +888,7 @@ export default function ChannelSidebar({
         <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
           <button
             type="button"
-            onClick={() => setMicMuted((v) => !v)}
+            onClick={() => (onToggleMic ? onToggleMic() : setLocalMicMuted((v) => !v))}
             title={micMuted ? "Unmute Mic" : "Mute Mic"}
             style={{
               width: 30,
@@ -881,7 +896,7 @@ export default function ChannelSidebar({
               borderRadius: 4,
               border: "none",
               background: "transparent",
-              color: micMuted ? "#f23f43" : "#b5bac1",
+              color: micMuted ? "#e5666b" : "#aab1bc",
               fontSize: 14,
               cursor: "pointer",
               display: "flex",
@@ -889,12 +904,12 @@ export default function ChannelSidebar({
               justifyContent: "center",
             }}
           >
-            {micMuted ? "🎙️❌" : "🎙️"}
+            {micMuted ? <Icon name="micOff" /> : <Icon name="mic" />}
           </button>
 
           <button
             type="button"
-            onClick={() => setHeadphonesMuted((v) => !v)}
+            onClick={() => (onToggleDeafen ? onToggleDeafen() : setLocalHeadphonesMuted((v) => !v))}
             title={headphonesMuted ? "Undeafen" : "Deafen"}
             style={{
               width: 30,
@@ -902,7 +917,7 @@ export default function ChannelSidebar({
               borderRadius: 4,
               border: "none",
               background: "transparent",
-              color: headphonesMuted ? "#f23f43" : "#b5bac1",
+              color: headphonesMuted ? "#e5666b" : "#aab1bc",
               fontSize: 14,
               cursor: "pointer",
               display: "flex",
@@ -910,7 +925,7 @@ export default function ChannelSidebar({
               justifyContent: "center",
             }}
           >
-            {headphonesMuted ? "🎧❌" : "🎧"}
+            {headphonesMuted ? <Icon name="headphonesOff" /> : <Icon name="headphones" />}
           </button>
 
           <button
@@ -923,7 +938,7 @@ export default function ChannelSidebar({
               borderRadius: 4,
               border: "none",
               background: "transparent",
-              color: "#b5bac1",
+              color: "#aab1bc",
               fontSize: 14,
               cursor: "pointer",
               display: "flex",
@@ -931,7 +946,7 @@ export default function ChannelSidebar({
               justifyContent: "center",
             }}
           >
-            ⚙️
+            <Icon name="settings" />
           </button>
         </div>
       </div>

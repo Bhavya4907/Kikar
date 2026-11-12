@@ -2,28 +2,28 @@ import type React from "react"
 
 /* ────────────────────────────────────────────────────────────────────
    KIKAR AI — Design Tokens
-   Aligned with dark charcoal + vivid green theme (globals.css)
+   Near-black cool grays + one desaturated indigo accent (matches globals.css)
 ──────────────────────────────────────────────────────────────────── */
 
 export const T = {
-  bg:          "#111111",
-  bgAlt:       "#0d0d0d",
-  surface:     "#1c1c1c",
-  surfaceAlt:  "#232323",
+  bg:          "#0f1115",
+  bgAlt:       "#0b0d11",
+  surface:     "#161a20",
+  surfaceAlt:  "#1e232b",
   surfaceGlass:"rgba(255,255,255,0.04)",
   border:      "rgba(255,255,255,0.08)",
   borderHover: "rgba(255,255,255,0.14)",
-  primary:     "hsl(119, 99%, 46%)",
-  primaryDim:  "hsla(119, 99%, 46%, 0.15)",
-  primaryFg:   "#0a0a0a",
-  purple:      "#a855f7",
-  purpleDim:   "rgba(168,85,247,0.15)",
-  amber:       "#f59e0b",
-  text:        "#f0f0f0",
-  muted:       "#888888",
-  muted2:      "#555555",
-  red:         "#f87171",
-  font:        "var(--font-sora), -apple-system, 'Segoe UI', sans-serif",
+  primary:     "hsl(226, 72%, 70%)",
+  primaryDim:  "hsla(226, 72%, 70%, 0.15)",
+  primaryFg:   "#0b0d11",
+  purple:      "#8b7cf6",
+  purpleDim:   "rgba(139,124,246,0.15)",
+  amber:       "#e0a84f",
+  text:        "#e6e8ec",
+  muted:       "#9aa1ad",
+  muted2:      "#6a7280",
+  red:         "#ef8a8a",
+  font:        "var(--font), -apple-system, 'Segoe UI', sans-serif",
 }
 
 // Keep WA for backward compat (not used in new code, but avoids import errors)
@@ -58,14 +58,12 @@ export const S: Record<string, React.CSSProperties> = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    background: `radial-gradient(ellipse at 50% 0%, hsla(119,99%,46%,0.08) 0%, ${T.bg} 60%)`,
+    background: `radial-gradient(ellipse at 50% 0%, hsla(226,72%,70%,0.08) 0%, ${T.bg} 60%)`,
     padding: 16,
     fontFamily: T.font,
   },
   authCard: {
-    background: "rgba(28,28,28,0.85)",
-    backdropFilter: "blur(20px)",
-    WebkitBackdropFilter: "blur(20px)",
+    background: "rgba(28,28,28,0.97)",
     border: `1px solid ${T.border}`,
     borderRadius: 20,
     padding: "44px 32px",
@@ -89,12 +87,12 @@ export const S: Record<string, React.CSSProperties> = {
     height: 56,
     borderRadius: 16,
     background: T.primaryDim,
-    border: `1px solid hsla(119,99%,46%,0.3)`,
+    border: `1px solid hsla(226,72%,70%,0.3)`,
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
     fontSize: 26,
-    boxShadow: `0 0 24px hsla(119,99%,46%,0.2)`,
+    boxShadow: `0 0 24px hsla(226,72%,70%,0.2)`,
   },
   authTitle: {
     margin: 0,
@@ -128,7 +126,7 @@ export const S: Record<string, React.CSSProperties> = {
     fontSize: 13,
     fontWeight: 500,
     fontFamily: T.font,
-    transition: "all 0.18s ease",
+    transition: "background-color 0.18s, border-color 0.18s, color 0.18s, opacity 0.18s, box-shadow 0.18s, transform 0.18s ease",
   },
   authTabActive: {
     background: T.surface,
@@ -150,7 +148,7 @@ export const S: Record<string, React.CSSProperties> = {
   },
   authBtn: {
     padding: "14px 0",
-    background: `linear-gradient(135deg, ${T.primary} 0%, hsl(119,99%,38%) 100%)`,
+    background: `linear-gradient(135deg, ${T.primary} 0%, hsl(226,62%,58%) 100%)`,
     border: "none",
     borderRadius: 10,
     fontWeight: 700,
@@ -161,7 +159,7 @@ export const S: Record<string, React.CSSProperties> = {
     fontFamily: T.font,
     letterSpacing: "0.01em",
     transition: "opacity 0.18s ease, transform 0.12s ease",
-    boxShadow: `0 4px 24px hsla(119,99%,46%,0.25)`,
+    boxShadow: `0 4px 24px hsla(226,72%,70%,0.25)`,
   },
 
   /* ── Sidebar ──────────────────────────────────────────────────── */
@@ -221,11 +219,11 @@ export const S: Record<string, React.CSSProperties> = {
     fontFamily: T.font,
     cursor: "pointer",
     letterSpacing: "0.01em",
-    transition: "all 0.18s ease",
+    transition: "background-color 0.18s, border-color 0.18s, color 0.18s, opacity 0.18s, box-shadow 0.18s, transform 0.18s ease",
   },
   tabBtnActive: {
     background: T.primaryDim,
-    borderColor: `hsla(119,99%,46%,0.35)`,
+    borderColor: `hsla(226,72%,70%,0.35)`,
     color: T.primary,
     fontWeight: 600,
   },
@@ -239,7 +237,7 @@ export const S: Record<string, React.CSSProperties> = {
     margin: "12px 12px 6px",
     padding: "11px 0",
     background: "transparent",
-    border: `1px dashed hsla(119,99%,46%,0.4)`,
+    border: `1px dashed hsla(226,72%,70%,0.4)`,
     borderRadius: 10,
     color: T.primary,
     fontSize: 13,
@@ -381,7 +379,6 @@ export const S: Record<string, React.CSSProperties> = {
     background: T.surface,
     borderBottom: `1px solid ${T.border}`,
     flexShrink: 0,
-    backdropFilter: "blur(12px)",
   },
   chatName: {
     fontSize: 15,
@@ -411,11 +408,11 @@ export const S: Record<string, React.CSSProperties> = {
     animation: "fade-in 0.2s ease both",
   },
   bubbleUser: {
-    background: `linear-gradient(135deg, ${T.primary} 0%, hsl(119,99%,38%) 100%)`,
+    background: `linear-gradient(135deg, ${T.primary} 0%, hsl(226,62%,58%) 100%)`,
     color: T.primaryFg,
     alignSelf: "flex-end",
     borderBottomRightRadius: 4,
-    boxShadow: `0 2px 12px hsla(119,99%,46%,0.2)`,
+    boxShadow: `0 2px 12px hsla(226,72%,70%,0.2)`,
     fontWeight: 500,
   },
   bubbleAI: {
@@ -451,7 +448,7 @@ export const S: Record<string, React.CSSProperties> = {
     width: 42,
     height: 42,
     borderRadius: "50%",
-    background: `linear-gradient(135deg, ${T.primary}, hsl(119,99%,38%))`,
+    background: `linear-gradient(135deg, ${T.primary}, hsl(226,62%,58%))`,
     border: "none",
     fontSize: 17,
     cursor: "pointer",
@@ -462,7 +459,7 @@ export const S: Record<string, React.CSSProperties> = {
     alignItems: "center",
     justifyContent: "center",
     transition: "opacity 0.15s, transform 0.12s",
-    boxShadow: `0 2px 12px hsla(119,99%,46%,0.3)`,
+    boxShadow: `0 2px 12px hsla(226,72%,70%,0.3)`,
   },
   imgBtn: {
     width: 42,
@@ -495,12 +492,12 @@ export const S: Record<string, React.CSSProperties> = {
     height: 72,
     borderRadius: 20,
     background: T.primaryDim,
-    border: `1px solid hsla(119,99%,46%,0.25)`,
+    border: `1px solid hsla(226,72%,70%,0.25)`,
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
     fontSize: 32,
-    boxShadow: `0 0 32px hsla(119,99%,46%,0.12)`,
+    boxShadow: `0 0 32px hsla(226,72%,70%,0.12)`,
   },
   emptyTitle: {
     fontSize: 16,
@@ -518,7 +515,7 @@ export const S: Record<string, React.CSSProperties> = {
   },
   emptyBtn: {
     padding: "12px 28px",
-    background: `linear-gradient(135deg, ${T.primary} 0%, hsl(119,99%,38%) 100%)`,
+    background: `linear-gradient(135deg, ${T.primary} 0%, hsl(226,62%,58%) 100%)`,
     border: "none",
     borderRadius: 999,
     fontWeight: 700,
@@ -527,7 +524,7 @@ export const S: Record<string, React.CSSProperties> = {
     color: T.primaryFg,
     fontFamily: T.font,
     letterSpacing: "0.01em",
-    boxShadow: `0 4px 20px hsla(119,99%,46%,0.25)`,
+    boxShadow: `0 4px 20px hsla(226,72%,70%,0.25)`,
     transition: "opacity 0.15s, transform 0.12s",
   },
 
@@ -595,12 +592,12 @@ export const S: Record<string, React.CSSProperties> = {
     border: `1px solid ${T.border}`,
     borderRadius: 10,
     cursor: "pointer",
-    transition: "all 0.15s",
+    transition: "background-color 0.15s, border-color 0.15s, color 0.15s, opacity 0.15s, box-shadow 0.15s, transform 0.15s",
   },
   emojiBtnActive: {
-    borderColor: `hsla(119,99%,46%,0.6)`,
+    borderColor: `hsla(226,72%,70%,0.6)`,
     background: T.primaryDim,
-    boxShadow: `0 0 12px hsla(119,99%,46%,0.2)`,
+    boxShadow: `0 0 12px hsla(226,72%,70%,0.2)`,
     transform: "scale(1.08)",
   },
   formBtns: {
@@ -624,7 +621,7 @@ export const S: Record<string, React.CSSProperties> = {
   createBtn: {
     flex: 2,
     padding: "13px 0",
-    background: `linear-gradient(135deg, ${T.primary} 0%, hsl(119,99%,38%) 100%)`,
+    background: `linear-gradient(135deg, ${T.primary} 0%, hsl(226,62%,58%) 100%)`,
     border: "none",
     borderRadius: 10,
     fontWeight: 700,
@@ -633,7 +630,7 @@ export const S: Record<string, React.CSSProperties> = {
     cursor: "pointer",
     color: T.primaryFg,
     letterSpacing: "0.01em",
-    boxShadow: `0 4px 20px hsla(119,99%,46%,0.25)`,
+    boxShadow: `0 4px 20px hsla(226,72%,70%,0.25)`,
     transition: "opacity 0.15s, transform 0.12s",
   },
   dimText: {
@@ -683,13 +680,13 @@ export const S: Record<string, React.CSSProperties> = {
   },
   modeCardHoverAI: {
     transform: "translateY(-4px)",
-    borderColor: "hsla(119, 99%, 46%, 0.45)",
-    boxShadow: "0 16px 40px hsla(119, 99%, 46%, 0.15)",
+    borderColor: "hsla(226, 72%, 70%, 0.45)",
+    boxShadow: "0 16px 40px hsla(226, 72%, 70%, 0.15)",
   },
   modeCardHoverPeople: {
     transform: "translateY(-4px)",
-    borderColor: "rgba(168, 85, 247, 0.45)",
-    boxShadow: "0 16px 40px rgba(168, 85, 247, 0.15)",
+    borderColor: "rgba(139,124,246, 0.45)",
+    boxShadow: "0 16px 40px rgba(139,124,246, 0.15)",
   },
   modeIconWrap: {
     width: 64,
@@ -745,8 +742,8 @@ export const S: Record<string, React.CSSProperties> = {
   },
   botCardHover: {
     transform: "translateY(-4px)",
-    borderColor: "hsla(119, 99%, 46%, 0.4)",
-    background: "#222222",
+    borderColor: "hsla(226, 72%, 70%, 0.4)",
+    background: "#1e232b",
   },
   botAvatar: {
     width: 56,
