@@ -76,7 +76,6 @@ export default function Home() {
     setCharsLoading(true)
     supabase.from("characters")
       .select("*")
-      .or(`is_public.eq.true,created_by.eq.${session.user.id},is_replica.eq.true`)
       .order("created_at", { ascending: false })
       .then(({ data }) => { setCharacters(data || []); setCharsLoading(false) })
   }, [session])

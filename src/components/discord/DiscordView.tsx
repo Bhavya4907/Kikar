@@ -316,6 +316,15 @@ export default function DiscordView({
           })
         }
       })
+      .on("broadcast", { event: "clear-channel-msgs" }, ({ payload }) => {
+        if (payload && payload.channelId) {
+          setChannelMessages((prev) => {
+            const next = { ...prev, [payload.channelId]: [] }
+            try { localStorage.setItem("kikar_discord_messages", JSON.stringify(next)) } catch {}
+            return next
+          })
+        }
+      })
       .subscribe()
 
     realtimeChannelRef.current = channel
@@ -723,7 +732,7 @@ export default function DiscordView({
                   ...recentHistory,
                   { role: "user", content: `${myName}: ${content}` },
                 ],
-                systemPrompt: `${matchedChar.prompt}\n\nYou are chatting inside the #${activeChannel.name} channel on Kikar Discord. Keep your reply natural, in-character, and concise (1-3 sentences).`,
+                systemPrompt: `${matchedChar.system_prompt || matchedChar.prompt || ""}\n\nYou are ${matchedChar.name}, chatting inside the #${activeChannel.name} channel on Kikar Discord. Keep your reply natural, in-character, and concise (1-3 sentences).`,
                 maxTokens: 220,
                 userId: session?.user?.id,
               }),
@@ -735,7 +744,7 @@ export default function DiscordView({
               channelId: activeChannel.id,
               senderId: `bot-${matchedChar.id}`,
               senderName: matchedChar.name,
-              senderAvatar: matchedChar.avatar_url,
+              senderAvatar: matchedChar.avatar_url || matchedChar.emoji,
               role: isRep ? "replica" : "bot",
               badge: isRep ? "REPLICA" : "AI PERSONA",
               content: data?.reply || `Hey ${myName}!`,
@@ -1033,6 +1042,94 @@ Keep your answer concise, engaging, and formatting-rich (markdown). Use emojis s
     }
   }
 
+  function handleClearChannel(channelId: string) {
+    if (!window.confirm(`Clear all messages in #${activeChannel?.name || "this channel"}? This cannot be undone.`)) return
+    setChannelMessages((prev) => {
+      const next = { ...prev, [channelId]: [] }
+      try { localStorage.setItem("kikar_discord_messages", JSON.stringify(next)) } catch {}
+      return next
+    })
+    if (realtimeChannelRef.current) {
+      realtimeChannelRef.current.send({
+        type: "broadcast",
+        event: "clear-channel-msgs",
+        payload: { channelId },
+      })
+    }
+  }
+
+  function handleSummonBotToChannel(bot: any, mode: "call" | "mention") {
+    if (!activeChannel) return
+    if (mode === "mention") return
+
+    const botTypingKey = `bot-${bot.id}`
+    setTypingUsers((prev) => ({
+      ...prev,
+      [botTypingKey]: { name: bot.name, expires: Date.now() + 8000 },
+    }))
+
+    setTimeout(async () => {
+      try {
+        const recentHistory = (channelMessages[activeChannel.id] || []).slice(-5).map((m) => ({
+          role: m.senderId === session?.user?.id ? "user" : "assistant",
+          content: `${m.senderName}: ${m.content}`,
+        }))
+
+        const res = await apiFetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: [
+              ...recentHistory,
+              { role: "user", content: `You were just summoned into the #${activeChannel.name} channel on Kikar Discord by ${myName}. Say a charismatic, in-character hello to everyone in the channel and ask what they're discussing!` },
+            ],
+            systemPrompt: `${bot.system_prompt || bot.prompt || ""}\n\nYou are ${bot.name}. Speak in your distinct personality. Keep it punchy and concise (1-3 sentences).`,
+            maxTokens: 220,
+            userId: session?.user?.id,
+          }),
+        })
+        const data = await res.json()
+        const isRep = !!bot.is_replica
+        const botReply: DiscordMessage = {
+          id: `char-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          channelId: activeChannel.id,
+          senderId: `bot-${bot.id}`,
+          senderName: bot.name,
+          senderAvatar: bot.avatar_url || bot.emoji,
+          role: isRep ? "replica" : "bot",
+          badge: isRep ? "REPLICA" : "AI PERSONA",
+          content: data?.reply || `Hey #${activeChannel.name}! ${bot.name} is here!`,
+          created_at: new Date().toISOString(),
+        }
+
+        setChannelMessages((prev) => {
+          const updated = {
+            ...prev,
+            [activeChannel.id]: [...(prev[activeChannel.id] || []), botReply],
+          }
+          localStorage.setItem("kikar_discord_messages", JSON.stringify(updated))
+          return updated
+        })
+
+        if (realtimeChannelRef.current) {
+          realtimeChannelRef.current.send({
+            type: "broadcast",
+            event: "new-channel-msg",
+            payload: botReply,
+          })
+        }
+      } catch (err) {
+        console.error("Summon bot error:", err)
+      } finally {
+        setTypingUsers((prev) => {
+          const copy = { ...prev }
+          delete copy[botTypingKey]
+          return copy
+        })
+      }
+    }, 600)
+  }
+
   function handleCreateServer(newServer: DiscordServer) {
     const updated = [...servers, newServer]
     updateServers(updated)
@@ -1233,6 +1330,9 @@ Keep your answer concise, engaging, and formatting-rich (markdown). Use emojis s
               onReactMessage={handleReactMessage}
               voiceConnected={voiceConnected}
               onToggleVoice={handleToggleVoice}
+              characters={characters}
+              onClearHistory={() => handleClearChannel(activeChannel.id)}
+              onSummonBot={handleSummonBotToChannel}
               voiceStage={
                 showVoiceStageInChat ? (
                   <VoiceLoungeStage
@@ -1264,6 +1364,7 @@ Keep your answer concise, engaging, and formatting-rich (markdown). Use emojis s
               session={session}
               activeConvo={activeConvo}
               allProfiles={allProfiles}
+              characters={characters}
               onBack={onCloseActive}
               creating={creating}
               setCreating={setCreating}

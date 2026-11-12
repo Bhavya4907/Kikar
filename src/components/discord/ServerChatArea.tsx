@@ -3,6 +3,7 @@ import { useState, useRef, useEffect } from "react"
 import { T } from "../../styles"
 import type { DiscordChannel, DiscordMessage } from "../../lib/discordTypes"
 import { Icon } from "../Icons"
+import SummonBotModal from "./SummonBotModal"
 
 interface Props {
   channel: DiscordChannel
@@ -22,6 +23,9 @@ interface Props {
   voiceConnected?: boolean
   onToggleVoice?: () => void
   voiceStage?: React.ReactNode
+  characters?: any[]
+  onClearHistory?: () => void
+  onSummonBot?: (bot: any, mode: "call" | "mention") => void
 }
 
 const QUICK_EMOJIS = ["👍", "❤️", "🔥", "😂", "💀", "🚀"]
@@ -44,11 +48,15 @@ export default function ServerChatArea({
   voiceConnected = false,
   onToggleVoice,
   voiceStage,
+  characters = [],
+  onClearHistory,
+  onSummonBot,
 }: Props) {
   const [input, setInput] = useState("")
   const [hoveredMsgId, setHoveredMsgId] = useState<string | null>(null)
   const [showImagePromptModal, setShowImagePromptModal] = useState(false)
   const [imagePromptText, setImagePromptText] = useState("")
+  const [showSummonModal, setShowSummonModal] = useState(false)
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -214,6 +222,54 @@ export default function ServerChatArea({
             >
               <span><Icon name="shuffle" /></span>
               <span className="hide-on-mobile">Wingman</span>
+            </button>
+          )}
+
+          {/* Summon Custom Bot Button */}
+          <button
+            type="button"
+            onClick={() => setShowSummonModal(true)}
+            title="Summon Custom AI Bot"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 5,
+              padding: "4px 10px",
+              borderRadius: 6,
+              background: "hsla(226, 72%, 70%, 0.15)",
+              border: `1px solid ${T.primary}`,
+              color: T.primary,
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            <span>🤖</span>
+            <span className="hide-on-mobile">Call Bot</span>
+          </button>
+
+          {/* Clear Channel History Button */}
+          {onClearHistory && (
+            <button
+              type="button"
+              onClick={onClearHistory}
+              title="Clear channel chat history"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 5,
+                padding: "4px 8px",
+                borderRadius: 6,
+                background: "rgba(239, 68, 68, 0.12)",
+                border: "1px solid rgba(239, 68, 68, 0.3)",
+                color: T.red,
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              <span><Icon name="trash" /></span>
+              <span className="hide-on-mobile">Clear</span>
             </button>
           )}
 
@@ -646,6 +702,29 @@ export default function ServerChatArea({
             @ai
           </button>
 
+          {/* Summon Custom Bot Button */}
+          <button
+            type="button"
+            onClick={() => setShowSummonModal(true)}
+            title="Summon Custom Bot / Persona"
+            style={{
+              padding: "2px 8px",
+              borderRadius: 4,
+              background: "hsla(226,72%,70%,0.12)",
+              border: "1px solid rgba(255,255,255,0.12)",
+              color: T.primary,
+              fontSize: 11,
+              fontWeight: 700,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 3,
+            }}
+          >
+            <span>🤖</span>
+            <span>Bots</span>
+          </button>
+
           {/* AI Image Generation Button */}
           {onGenerateImage && (
             <button
@@ -775,6 +854,22 @@ export default function ServerChatArea({
           </div>
         </div>
       )}
+
+      {/* ── Summon Custom AI Bot Modal ── */}
+      <SummonBotModal
+        isOpen={showSummonModal}
+        onClose={() => setShowSummonModal(false)}
+        characters={characters}
+        channelOrPeerName={`#${channel.name}`}
+        onSelectBot={(bot, mode) => {
+          if (mode === "mention") {
+            const tag = `@${(bot.name || "bot").toLowerCase().replace(/\s+/g, "_")} `
+            setInput((prev) => (prev.startsWith(tag) ? prev : `${tag}${prev}`))
+          } else if (mode === "call" && onSummonBot) {
+            onSummonBot(bot, "call")
+          }
+        }}
+      />
     </div>
   )
 }

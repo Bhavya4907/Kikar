@@ -5,11 +5,13 @@ import { supabase } from "../lib/supabase"
 import { T } from "../styles"
 import { formatTime, formatDate, showNotification, speakMessageText, stopSpeakingText } from "../lib/helpers"
 import { Icon } from "./Icons"
+import SummonBotModal from "./discord/SummonBotModal"
 
 interface Props {
   session: any
   activeConvo: any
   allProfiles: any[]
+  characters?: any[]
   onBack: () => void
   creating: boolean
   setCreating: (v: boolean) => void
@@ -17,7 +19,7 @@ interface Props {
 }
 
 export default function DMWindow({
-  session, activeConvo, allProfiles, onBack, creating, setCreating, onReplicaCreated
+  session, activeConvo, allProfiles, characters = [], onBack, creating, setCreating, onReplicaCreated
 }: Props) {
   const [input, setInput] = useState("")
   const [directMessages, setDirectMessages] = useState<any[]>([])
@@ -25,7 +27,9 @@ export default function DMWindow({
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [activeActionMsgId, setActiveActionMsgId] = useState<string | null>(null)
   const [speakingMsgId, setSpeakingMsgId] = useState<string | null>(null)
-  const [autoReplicaMode, setAutoReplicaMode] = useState(false)
+  const [autoReplicaMode, setAutoReplicaMode] = useState(true)
+  const [replicaSessionActive, setReplicaSessionActive] = useState(false)
+  const [showSummonModal, setShowSummonModal] = useState(false)
   const [replicaTyping, setReplicaTyping] = useState(false)
   const [typingLabel, setTypingLabel] = useState<string | null>(null)
   const [catchUpSummary, setCatchUpSummary] = useState<string | null>(null)
@@ -39,6 +43,8 @@ export default function DMWindow({
     ? activeConvo.user2
     : activeConvo.user1
   const otherProfile = allProfiles.find((p: any) => p.id === other?.id) || other
+  const otherName = otherProfile?.display_name || otherProfile?.username || "Friend"
+  const myName = session.user.email?.split("@")[0] || "Friend"
 
   // Helper to merge messages without duplicates
   function mergeMessages(incoming: any[]) {
@@ -116,6 +122,11 @@ export default function DMWindow({
           setDirectMessages(prev => prev.filter(m => m.id !== payload.id))
         }
       })
+      .on("broadcast", { event: "dm-clear" }, ({ payload }) => {
+        if (payload?.conversation_id === activeConvo.id) {
+          setDirectMessages([])
+        }
+      })
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "direct_messages" },
         (p) => {
           if (p.new && p.new.conversation_id === activeConvo.id) {
@@ -154,7 +165,10 @@ export default function DMWindow({
   }, [directMessages.length, replicaTyping])
 
   async function postSmartDMMessage(personaBadge: string, replyText: string) {
-    const taggedContent = `[replica:${personaBadge}]: ${replyText}`
+    const taggedContent = personaBadge.startsWith("[bot:")
+      ? `${personaBadge}: ${replyText}`
+      : `[replica:${personaBadge}]: ${replyText}`
+
     const { data: inserted } = await supabase
       .from("direct_messages")
       .insert({
@@ -176,6 +190,43 @@ export default function DMWindow({
     return inserted
   }
 
+  async function handleSummonBotInDM(bot: any, mode: "call" | "mention") {
+    if (mode === "mention") {
+      const tag = `@${(bot.name || "bot").toLowerCase().replace(/\s+/g, "_")} `
+      setInput(prev => (prev.startsWith(tag) ? prev : `${tag}${prev}`))
+      return
+    }
+
+    const botName = bot.name
+    const botEmoji = bot.emoji || "🤖"
+    setReplicaTyping(true)
+    setTypingLabel(`${botEmoji} ${botName} is entering the chat...`)
+    try {
+      const recentContext = directMessages.slice(-5).map(m => m.content).join("\n")
+      const res = await apiFetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [
+            { role: "user", content: `You were just called into a direct message conversation between ${myName} and ${otherName}. Say an energetic, in-character hello to both of them and chime into the vibe!\n\nRecent context:\n${recentContext}` }
+          ],
+          systemPrompt: `${bot.system_prompt || bot.prompt || ""}\n\nYou are ${botName}. Stay completely in character. Keep your greeting under 40 words.`,
+          userId: session.user.id,
+          chatId: `dm_${activeConvo.id}`,
+        }),
+      })
+      const data = await res.json()
+      if (data?.reply) {
+        await postSmartDMMessage(`[bot:${botName}:${botEmoji}]`, data.reply)
+      }
+    } catch (err) {
+      console.warn("Summon bot in DM error:", err)
+    } finally {
+      setReplicaTyping(false)
+      setTypingLabel(null)
+    }
+  }
+
   async function triggerSmartDMResponse(userMessageText: string, recentMessages: any[]) {
     const isAiSummon = /@(ai|kikar)\b/i.test(userMessageText) || /^@(ai|kikar)/i.test(userMessageText.trim())
     const otherName = otherProfile?.display_name || otherProfile?.username || "Friend"
@@ -183,12 +234,34 @@ export default function DMWindow({
     const cleanLower = userMessageText.toLowerCase()
     const otherNameLower = otherName.toLowerCase()
 
+    // 0. Check if a custom bot was mentioned: @<bot_name>
+    const mentionMatches = userMessageText.match(/@([a-zA-Z0-9_\-\.]+)/g) || []
+    let matchedCustomBot: any = null
+    for (const rawTag of mentionMatches) {
+      const tag = rawTag.slice(1).toLowerCase()
+      if (tag === "ai" || tag === "kikar" || tag === "replica" || tag === "twin") continue
+      matchedCustomBot = (characters || []).find((c: any) => {
+        const slug = (c.name || "").toLowerCase().replace(/\s+/g, "_")
+        const first = (c.name || "").toLowerCase().split(" ")[0]
+        const full = (c.name || "").toLowerCase()
+        return slug === tag || first === tag || full === tag
+      })
+      if (matchedCustomBot) break
+    }
+
     // 1. Mentions the replica or the other user
     const mentionsReplica = /replica|twin/i.test(userMessageText)
     const mentionsOther = cleanLower.includes(`@${otherNameLower}`) ||
       new RegExp(`\\b${otherNameLower}\\b`, "i").test(cleanLower)
 
-    // 2. Continuation of an ongoing multi-agent conversation
+    // 2. Ongoing conversation state with the replica
+    const lastMsg = recentMessages[recentMessages.length - 1]
+    const lastWasReplica = typeof lastMsg?.content === "string" && (
+      lastMsg.content.includes("[replica:") || lastMsg.is_replica_reply
+    )
+    const isReplicaConversationActive = (replicaSessionActive || lastWasReplica) && !isAiSummon && !matchedCustomBot
+
+    // 3. Continuation of an ongoing multi-agent conversation
     const lastFew = recentMessages.slice(-4)
     const hadRecentReplicaConvo = lastFew.some(m => typeof m.content === "string" && m.content.includes("replica:"))
     const isContinuation = hadRecentReplicaConvo && /continue|keep|more|again|talk|go on|what else/i.test(cleanLower)
@@ -199,12 +272,13 @@ export default function DMWindow({
     // Check if user directly addresses replica without @ai
     const isReplicaDirectSummon =
       /^\s*@(replica|twin)\b/i.test(userMessageText) ||
-      new RegExp(`^@${otherName}\\b`, "i").test(userMessageText.trim()) ||
-      /\b(talk to|ask|hey)\s+(the\s+)?(replica|twin)\b/i.test(userMessageText)
+      new RegExp(`@?${otherNameLower}\\b`, "i").test(cleanLower) ||
+      cleanLower.includes("replica") ||
+      /\b(talk to|ask|hey|hi|hello|what's up|tell)\s+(the\s+)?(replica|twin|${otherNameLower})\b/i.test(cleanLower)
 
     const isRecipientOffline = !otherProfile?.is_online && autoReplicaMode
 
-    if (!isAiSummon && !isReplicaDirectSummon && !isRecipientOffline && !isCrossConvoRequest) return
+    if (!matchedCustomBot && !isAiSummon && !isReplicaDirectSummon && !isReplicaConversationActive && !isRecipientOffline && !isCrossConvoRequest) return
 
     // Helper to retrieve the other user's replica prompt or past voice
     async function getReplicaSystemPrompt() {
@@ -319,9 +393,38 @@ Keep it witty, fast, friendly, and under 35 words.`,
         if (aiData2?.reply) {
           await postSmartDMMessage("Kikar AI Co-Pilot", aiData2.reply)
         }
+        setReplicaSessionActive(true)
+
+      } else if (matchedCustomBot) {
+        // ── SCENARIO B: Custom Bot Summoned in DM ──
+        const botName = matchedCustomBot.name
+        const botEmoji = matchedCustomBot.emoji || "🤖"
+        setTypingLabel(`${botEmoji} ${botName} is typing...`)
+        const cleanPrompt = userMessageText
+          .replace(new RegExp(`@${botName.replace(/\s+/g, "_")}`, "gi"), "")
+          .replace(new RegExp(`@${botName}`, "gi"), "")
+          .trim() || userMessageText
+
+        const res = await apiFetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: [
+              ...formattedHistory,
+              { role: "user", content: cleanPrompt },
+            ],
+            systemPrompt: `${matchedCustomBot.system_prompt || matchedCustomBot.prompt || ""}\n\nYou are ${botName}, summoned into a direct conversation between ${myName} and ${otherName}. Stay authentic to your persona, speak naturally, and keep replies concise (under 50 words).`,
+            userId: session.user.id,
+            chatId: `dm_${activeConvo.id}`,
+          }),
+        })
+        const data = await res.json()
+        if (data?.reply) {
+          await postSmartDMMessage(`[bot:${botName}:${botEmoji}]`, data.reply)
+        }
 
       } else if (isAiSummon) {
-        // ── SCENARIO B: Regular AI Summon ──
+        // ── SCENARIO C: Regular AI Summon ──
         setTypingLabel("Kikar AI Co-Pilot is thinking...")
         const cleanUserPrompt = userMessageText.replace(/^@(ai|kikar)\s*/i, "").trim()
 
@@ -343,17 +446,18 @@ Do NOT impersonate ${otherName} or their replica.`,
         }
 
       } else {
-        // ── SCENARIO C: Replica Speaks (Direct Summon or Offline Auto-Replica) ──
+        // ── SCENARIO D: Replica Speaks (Direct Summon, Follow-up, or Offline Auto-Replica) ──
+        setReplicaSessionActive(true)
         setTypingLabel(`${otherName}'s AI Replica is typing...`)
         const replicaPrompt = await getReplicaSystemPrompt()
-        const cleanText = userMessageText.replace(/^@(replica|twin|[a-zA-Z0-9_-]+)\s*/i, "").trim() || userMessageText
+        const cleanText = userMessageText.replace(/^@(replica|twin|[a-zA-Z0-9_\-\.]+)\s*/i, "").trim() || userMessageText
 
         const res = await apiFetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             messages: [...formattedHistory, { role: "user", content: cleanText }],
-            systemPrompt: `${replicaPrompt}\nYou are chatting directly with ${myName} while ${otherName} is away. Keep it natural, conversational, and under 50 words.`,
+            systemPrompt: `${replicaPrompt}\nYou are chatting directly with ${myName} (the human user). Match ${otherName}'s real voice, personality, slang, and brevity. Keep it natural, conversational, and under 50 words.`,
             userId: session.user.id,
             chatId: `dm_${activeConvo.id}`,
           }),
@@ -503,9 +607,19 @@ Do NOT impersonate ${otherName} or their replica.`,
   async function handleClearHistory() {
     setShowMobileMenu(false)
     if (directMessages.length === 0) return
-    if (window.confirm("Clear all messages in this direct conversation?")) {
-      await supabase.from("direct_messages").delete().eq("conversation_id", activeConvo.id)
+    if (window.confirm("Clear all messages in this direct conversation? This cannot be undone.")) {
       setDirectMessages([])
+      try {
+        const { error } = await supabase.from("direct_messages").delete().eq("conversation_id", activeConvo.id)
+        if (error) console.warn("Supabase clear error:", error.message)
+      } catch (err) {
+        console.warn("Delete error:", err)
+      }
+      channelRef.current?.send({
+        type: "broadcast",
+        event: "dm-clear",
+        payload: { conversation_id: activeConvo.id },
+      })
     }
   }
 
@@ -648,17 +762,51 @@ Do NOT impersonate ${otherName} or their replica.`,
           <div style={{ fontSize: 14, fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {other?.display_name || other?.username || "Direct Chat"}
           </div>
-          <div style={{ fontSize: 11, color: otherProfile?.is_online ? "#4fb987" : "#8b7cf6", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          <div
+            onClick={() => setReplicaSessionActive(prev => !prev)}
+            title="Click to toggle chatting with Replica"
+            style={{
+              fontSize: 11,
+              color: otherProfile?.is_online ? "#4fb987" : "#b3a8f8",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              cursor: "pointer",
+            }}
+          >
             {otherProfile?.is_online
               ? "● Live Chat Active"
-              : autoReplicaMode
-              ? "Replica Auto-Reply ON"
-              : "● Offline"}
+              : replicaSessionActive
+              ? "● Replica Chat Active (Tap to pause)"
+              : "● Offline (Tap to chat with Replica)"}
           </div>
         </div>
 
         {/* Compact Action Buttons */}
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+          {directMessages.length > 0 && (
+            <button
+              type="button"
+              onClick={handleClearHistory}
+              title="Clear all messages in this conversation"
+              style={{
+                background: "rgba(239, 68, 68, 0.12)",
+                border: "1px solid rgba(239, 68, 68, 0.3)",
+                borderRadius: 8,
+                color: T.red,
+                fontSize: 12,
+                cursor: "pointer",
+                padding: "6px 9px",
+                display: "flex",
+                alignItems: "center",
+                gap: 4,
+              }}
+            >
+              <Icon name="trash" />
+              <span className="hide-on-mobile" style={{ fontSize: 11, fontWeight: 600 }}>Clear</span>
+            </button>
+          )}
+
           <button
             type="button"
             disabled={creating}
@@ -782,6 +930,44 @@ Do NOT impersonate ${otherName} or their replica.`,
         </div>
       )}
 
+      {/* ── Active Replica Chat Banner ─────────────────────────── */}
+      {replicaSessionActive && (
+        <div style={{
+          margin: "8px 12px 0",
+          padding: "8px 14px",
+          background: "rgba(139,124,246,0.15)",
+          border: "1px solid rgba(139,124,246,0.4)",
+          borderRadius: 10,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          color: "#b3a8f8",
+          fontSize: 12,
+          fontWeight: 600,
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span>🪞</span>
+            <span>Chatting with {otherName}'s Digital Replica (AI Twin). Your messages will be answered by their replica.</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setReplicaSessionActive(false)}
+            style={{
+              background: "rgba(255,255,255,0.08)",
+              border: "1px solid rgba(139,124,246,0.4)",
+              color: "#eceef2",
+              borderRadius: 6,
+              padding: "3px 8px",
+              fontSize: 11,
+              cursor: "pointer",
+              whiteSpace: "nowrap",
+            }}
+          >
+            End Replica Session
+          </button>
+        </div>
+      )}
+
       {/* ── Catch-Up Digest Banner ──────────────────────────────── */}
       {catchUpSummary && (
         <div style={{
@@ -856,11 +1042,15 @@ Do NOT impersonate ${otherName} or their replica.`,
         )}
 
         {directMessages.map((m: any, i: number) => {
+          const botMatch = typeof m.content === "string" ? m.content.match(/^\[bot:(.*?):(.*?)]:([\s\S]*)$/i) : null
           const replicaMatch = typeof m.content === "string" ? m.content.match(/^\[replica:(.*?)\]:\s*([\s\S]*)$/i) : null
-          const replicaBadge = replicaMatch ? replicaMatch[1] : m.is_replica_reply ? "AI Replica" : null
-          const displayContent = replicaMatch ? replicaMatch[2] : m.content
+          const botName = botMatch ? botMatch[1] : null
+          const botEmoji = botMatch ? botMatch[2] : null
+          const replicaBadge = botMatch ? `${botEmoji} ${botName}` : replicaMatch ? replicaMatch[1] : m.is_replica_reply ? "AI Replica" : null
+          const displayContent = botMatch ? botMatch[3].trim() : replicaMatch ? replicaMatch[2] : m.content
 
           const isAiCoPilot = replicaBadge?.includes("Co-Pilot")
+          const isCustomBot = !!botMatch
           const isUser = m.sender_id === session.user.id && !isAiCoPilot && !replicaBadge
           const isImage = displayContent?.startsWith("[image]:")
           const imageUrl = isImage ? displayContent.replace("[image]:", "") : null
@@ -915,9 +1105,9 @@ Do NOT impersonate ${otherName} or their replica.`,
                     <div style={{
                       fontSize: 10,
                       fontWeight: 700,
-                      color: isAiCoPilot ? T.primary : "#b3a8f8",
-                      background: isAiCoPilot ? "hsla(226,72%,70%,0.12)" : "rgba(139,124,246,0.14)",
-                      border: isAiCoPilot ? "1px solid hsla(226,72%,70%,0.3)" : "1px solid rgba(139,124,246,0.3)",
+                      color: (isAiCoPilot || isCustomBot) ? T.primary : "#b3a8f8",
+                      background: (isAiCoPilot || isCustomBot) ? "hsla(226,72%,70%,0.12)" : "rgba(139,124,246,0.14)",
+                      border: (isAiCoPilot || isCustomBot) ? "1px solid hsla(226,72%,70%,0.3)" : "1px solid rgba(139,124,246,0.3)",
                       borderRadius: 999,
                       padding: "2px 8px",
                       marginBottom: 4,
@@ -1126,6 +1316,54 @@ Do NOT impersonate ${otherName} or their replica.`,
           @ai
         </button>
 
+        <button
+          type="button"
+          onClick={() => {
+            if (!input.startsWith("@replica ")) setInput(`@replica ${input}`)
+          }}
+          title={`Talk directly to ${otherName}'s Replica`}
+          style={{
+            padding: "0 9px",
+            height: 36,
+            borderRadius: 999,
+            background: input.startsWith("@replica") ? "rgba(139,124,246,0.2)" : T.bgAlt,
+            border: input.startsWith("@replica") ? "1px solid #b3a8f8" : `1px solid ${T.border}`,
+            color: input.startsWith("@replica") ? "#b3a8f8" : T.muted,
+            fontSize: 11,
+            fontWeight: 700,
+            cursor: "pointer",
+            fontFamily: T.font,
+            flexShrink: 0,
+          }}
+        >
+          @replica
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setShowSummonModal(true)}
+          title="Summon any custom bot created by any user"
+          style={{
+            padding: "0 9px",
+            height: 36,
+            borderRadius: 999,
+            background: "hsla(226,72%,70%,0.15)",
+            border: `1px solid ${T.primary}`,
+            color: T.primary,
+            fontSize: 11,
+            fontWeight: 700,
+            cursor: "pointer",
+            fontFamily: T.font,
+            flexShrink: 0,
+            display: "flex",
+            alignItems: "center",
+            gap: 4,
+          }}
+        >
+          <span>🤖</span>
+          <span>Bots</span>
+        </button>
+
         <input
           className="cc-chat-input"
           value={input}
@@ -1168,6 +1406,15 @@ Do NOT impersonate ${otherName} or their replica.`,
           }}
         >↑</button>
       </div>
+
+      {/* ── Summon Custom Bot Modal ── */}
+      <SummonBotModal
+        isOpen={showSummonModal}
+        onClose={() => setShowSummonModal(false)}
+        characters={characters}
+        channelOrPeerName={otherName}
+        onSelectBot={handleSummonBotInDM}
+      />
     </div>
   )
 }
